@@ -127,8 +127,12 @@ class DownloadManager(QObject):
     def start_downloads(self, file_tuples, base_folder):
         # file_tuples: list of (url, rel_path)
         self.base_folder = base_folder
-        self.active_workers.clear()
-        self.size_calculator = SizeCalculator([url for url, _ in file_tuples], self.config)
+        # Only add files that are not already in the queue or being downloaded
+        new_urls = [url for url, _ in file_tuples if url not in [u for u, _ in self.download_queue] and url not in self.active_workers]
+        if not new_urls:
+            return
+        # Calculate sizes for new files only
+        self.size_calculator = SizeCalculator(new_urls, self.config)
         self.size_calculator.progress.connect(self.size_calc_progress)
         self.size_calculator.finished.connect(lambda total_size, file_sizes_map: self._on_size_calc_finished(total_size, file_sizes_map, file_tuples))
         self.size_calculator.error.connect(lambda msg: self.error.emit("Size Calculation", msg))
@@ -136,12 +140,19 @@ class DownloadManager(QObject):
 
     def _on_size_calc_finished(self, total_size, file_sizes_map, file_tuples):
         self.size_calc_finished.emit()
-        self.total_bytes_to_download, self.total_bytes_downloaded = total_size, 0
-        self.file_sizes = file_sizes_map
-        # Build a queue of (url, rel_path)
-        self.download_queue = [(url, rel_path) for url, rel_path in file_tuples if url in self.file_sizes]
-        if not self.download_queue: self.all_finished.emit()
-        else: self.check_queue()
+        # Add new file sizes to the map and update total_bytes_to_download
+        for url, size in file_sizes_map.items():
+            if url not in self.file_sizes:
+                self.file_sizes[url] = size
+                self.total_bytes_to_download += size
+        # Append new files to the queue
+        for url, rel_path in file_tuples:
+            if url in file_sizes_map and (url, rel_path) not in self.download_queue and url not in self.active_workers:
+                self.download_queue.append((url, rel_path))
+        if not self.download_queue and not self.active_workers:
+            self.all_finished.emit()
+        else:
+            self.check_queue()
 
     def check_queue(self):
         if not self.download_queue and not self.active_workers:

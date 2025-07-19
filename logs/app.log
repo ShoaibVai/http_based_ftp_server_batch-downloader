@@ -56,3 +56,30 @@
 2025-07-20 02:51:36,390 - config.manager - INFO - Settings saved to config.json
 2025-07-20 02:51:36,390 - utils.logger - INFO - Application closing.
 2025-07-20 02:53:29,524 - utils.logger - INFO - Logger initialized.
+2025-07-20 02:55:09,149 - config.manager - INFO - Settings saved to config.json
+2025-07-20 02:55:09,150 - utils.logger - INFO - Application closing.
+2025-07-20 02:55:13,228 - utils.logger - INFO - Logger initialized.
+2025-07-20 02:55:55,641 - utils.logger - INFO - Finished downloading Batman.The.Brave.and.The.Bold.S01E01.The.Rise.of.the.Blue.Beetle.BRRiP.x264-FUM.mp4
+2025-07-20 02:56:02,041 - config.manager - INFO - Settings saved to config.json
+2025-07-20 02:56:02,041 - utils.logger - INFO - Application closing.
+2025-07-20 02:57:05,229 - utils.logger - INFO - Logger initialized.
+2025-07-20 02:57:29,846 - core.downloader - ERROR - Attempt 1 failed for http://172.16.50.9/DHAKA-FLIX-9/Anime%20%26%20Cartoon%20TV%20Series/Anime-TV%20Series%20%E2%99%A5%20%20A%20%20%E2%80%94%20%20F/Batman-The%20Brave%20and%20the%20Bold%20%28TV%20Cartoon%202008%E2%80%932011%29/Season%201/Batman.The.Brave.and.The.Bold.S01E01.The.Rise.of.the.Blue.Beetle.BRRiP.x264-FUM.mp4: 416 Client Error: Requested Range Not Satisfiable for url: http://172.16.50.9/DHAKA-FLIX-9/Anime%20%26%20Cartoon%20TV%20Series/Anime-TV%20Series%20%E2%99%A5%20%20A%20%20%E2%80%94%20%20F/Batman-The%20Brave%20and%20the%20Bold%20%28TV%20Cartoon%202008%E2%80%932011%29/Season%201/Batman.The.Brave.and.The.Bold.S01E01.The.Rise.of.the.Blue.Beetle.BRRiP.x264-FUM.mp4
+2025-07-20 02:57:34,973 - core.downloader - ERROR - Attempt 2 failed for http://172.16.50.9/DHAKA-FLIX-9/Anime%20%26%20Cartoon%20TV%20Series/Anime-TV%20Series%20%E2%99%A5%20%20A%20%20%E2%80%94%20%20F/Batman-The%20Brave%20and%20the%20Bold%20%28TV%20Cartoon%202008%E2%80%932011%29/Season%201/Batman.The.Brave.and.The.Bold.S01E01.The.Rise.of.the.Blue.Beetle.BRRiP.x264-FUM.mp4: 416 Client Error: Requested Range Not Satisfiable for url: http://172.16.50.9/DHAKA-FLIX-9/Anime%20%26%20Cartoon%20TV%20Series/Anime-TV%20Series%20%E2%99%A5%20%20A%20%20%E2%80%94%20%20F/Batman-The%20Brave%20and%20the%20Bold%20%28TV%20Cartoon%202008%E2%80%932011%29/Season%201/Batman.The.Brave.and.The.Bold.S01E01.The.Rise.of.the.Blue.Beetle.BRRiP.x264-FUM.mp4
+2025-07-20 02:57:35,609 - utils.logger - INFO - Finished downloading Batman.The.Brave.and.The.Bold.S01E02.Terror.on.Dinosaur.Island.BRRiP.x264-FUM.mp4
+2025-07-20 02:57:39,154 - config.manager - INFO - Settings saved to config.json
+2025-07-20 02:57:39,155 - utils.logger - INFO - Application closing.
+2025-07-20 02:58:06,627 - utils.logger - INFO - Logger initialized.
+2025-07-20 02:58:32,408 - config.manager - INFO - Settings saved to config.json
+2025-07-20 02:58:32,559 - config.manager - INFO - Settings saved to config.json
+2025-07-20 02:58:33,896 - config.manager - INFO - Settings saved to config.json
+2025-07-20 02:58:43,162 - core.lister - ERROR - HTTP error for http://172.16.50.9/DHAKA-FLIX-9/Anime%20%26%20Cartoon%20TV%20Series/Anime-TV%20Series%20%E2%99%A5%20%20A%20%20%E2%80%94%20%20F/Batman-The%20Brave%20and%20the%20Bold%20%28TV%20Chttp://172.16.50.9/DHAKA-FLIX-9/Anime%20%26%20Cartoon%20TV%20Series/Anime-TV%20Series%20%E2%99%A5%20%20A%20%20%E2%80%94%20%20F/Batman-The%20Brave%20and%20the%20Bold%20%28TV%20Cartoon%202008%E2%80%932011%29/artoon%202008%E2%80%932011%29/: 404 Client Error: Not Found for url: http://172.16.50.9/DHAKA-FLIX-9/Anime%20%26%20Cartoon%20TV%20Series/Anime-TV%20Series%20%E2%99%A5%20%20A%20%20%E2%80%94%20%20F/Batman-The%20Brave%20and%20the%20Bold%20%28TV%20Chttp://172.16.50.9/DHAKA-FLIX-9/Anime%20%26%20Cartoon%20TV%20Series/Anime-TV%20Series%20%E2%99%A5%20%20A%20%20%E2%80%94%20%20F/Batman-The%20Brave%20and%20the%20Bold%20%28TV%20Cartoon%202008%E2%80%932011%29/artoon%202008%E2%80%932011%29/
+2025-07-20 02:59:10,672 - utils.logger - INFO - Finished downloading Batman.The.Brave.and.The.Bold.S01E02.Terror.on.Dinosaur.Island.BRRiP.x264-FUM.mp4
+2025-07-20 03:00:13,120 - utils.logger - INFO - Finished downloading %5BDeadFish%5D%20Arakawa%20Under%20the%20Bridge%20-%2005%20%5BBD%5D%5B720p%5D%5BAAC%5D.mp4
+2025-07-20 03:01:24,960 - config.manager - INFO - Settings saved to config.json
+2025-07-20 03:01:24,961 - utils.logger - INFO - Application closing.
+2025-07-20 03:04:28,928 - utils.logger - INFO - Logger initialized.
+2025-07-20 03:06:25,005 - config.manager - INFO - Settings saved to config.json
+2025-07-20 03:06:25,005 - utils.logger - INFO - Application closing.
+2025-07-20 03:06:33,932 - utils.logger - INFO - Logger initialized.
+2025-07-20 03:07:31,271 - config.manager - INFO - Settings saved to config.json
+2025-07-20 03:07:31,271 - utils.logger - INFO - Application closing.

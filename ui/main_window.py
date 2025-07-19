@@ -174,15 +174,8 @@ class MainWindow(QMainWindow):
         base_folder = os.path.join(download_path, root_dir_name)
         os.makedirs(base_folder, exist_ok=True)
         self.set_ui_state(True, "Calculating total download size...")
-        # Clear previous progress widgets
-        for i in reversed(range(self.per_file_progress_layout.count())): 
-            item = self.per_file_progress_layout.takeAt(i)
-            if item.widget(): item.widget().deleteLater()
-            elif item.layout():
-                while item.layout().count():
-                    child = item.layout().takeAt(0)
-                    if child.widget(): child.widget().deleteLater()
-        self.file_progress_widgets.clear()
+        # Do NOT clear previous progress widgets or layout here
+        # Only add new widgets for new files in on_file_download_started
         # Pass (url, rel_path) and base_folder to the download manager
         self.download_manager.start_downloads(selected_files, base_folder)
 
@@ -247,7 +240,7 @@ class MainWindow(QMainWindow):
     def cancel_downloads(self): self.statusBar.showMessage("Canceling..."); self.download_manager.cancel_all()
 
     def fetch_directory_listing(self):
-        if self.is_downloading: QMessageBox.warning(self, "Busy", "Cannot fetch while downloads are in progress."); return
+        # Allow fetching new directory listings even if downloads are in progress
         url = self.url_input.text().strip()
         if not url: QMessageBox.warning(self, "Warning", "Please enter a URL."); return
         self.tree_widget.clear(); self.path_to_item_map.clear()

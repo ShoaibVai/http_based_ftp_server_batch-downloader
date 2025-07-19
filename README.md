@@ -1,4 +1,4 @@
-# FTP Batch Downloader
+1# FTP Batch Downloader
 
 FTP Batch Downloader is a cross-platform desktop application built with Python and PyQt5 that allows you to browse and batch download files from both HTTP and FTP servers. It features a modern GUI, robust error handling, and flexible configuration.
 
