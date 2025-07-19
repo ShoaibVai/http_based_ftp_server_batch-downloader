@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QApplication, QStyle, QTreeWidgetItemIterator, QSizePolicy
 )
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QIcon, QMovie
+from PyQt5.QtGui import QIcon, QMovie, QPalette, QColor
 
 from core.lister import DirectoryLister
 from core.downloader import DownloadManager
@@ -68,7 +68,7 @@ class MainWindow(QMainWindow):
         self.overall_progress = QProgressBar(); self.overall_progress.setTextVisible(True); self.overall_progress.setValue(0)
         self.overall_progress.setFormat("%p%")
         self.overall_progress.setMinimumHeight(24)
-        self.overall_progress.setStyleSheet("QProgressBar { border-radius: 8px; background: #23272b; color: #f8fafd; text-align: center; } QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00bcd4, stop:1 #8bc34a); border-radius: 8px; }")
+        self.overall_progress.setStyleSheet("QProgressBar { border-radius: 8px; background: #23272b; color: #8B0000; text-align: center; } QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00bcd4, stop:1 #8bc34a); border-radius: 8px; }")
         overall_progress_layout.addWidget(self.overall_progress); progress_layout.addLayout(overall_progress_layout)
         self.per_file_progress_layout = QVBoxLayout(); progress_layout.addLayout(self.per_file_progress_layout)
         progress_layout.addStretch(); splitter.addWidget(progress_frame); splitter.setSizes([500, 300])
@@ -95,18 +95,18 @@ class MainWindow(QMainWindow):
         # Improved dark theme for better contrast and accessibility
         self.setStyleSheet('''
             QMainWindow { background: #181c1f; }
-            QPushButton { border-radius: 8px; padding: 6px 16px; font-size: 14px; background: #23272b; color: #f8fafd; }
-            QPushButton:pressed { background: #263238; color: #fff; }
-            QPushButton:hover { background: #37474f; color: #fff; }
-            QLineEdit { border: 1px solid #37474f; border-radius: 8px; padding: 4px 8px; font-size: 14px; background: #23272b; color: #f8fafd; selection-background-color: #00bcd4; selection-color: #181c1f; }
-            QLabel { font-size: 14px; color: #f8fafd; }
+            QPushButton { border-radius: 8px; padding: 6px 16px; font-size: 14px; background: #23272b; color: #8B0000; }
+            QPushButton:pressed { background: #263238; color: #8B0000; }
+            QPushButton:hover { background: #37474f; color: #8B0000; }
+            QLineEdit { border: 1px solid #37474f; border-radius: 8px; padding: 4px 8px; font-size: 14px; background: #23272b; color: #8B0000; selection-background-color: #00bcd4; selection-color: #181c1f; }
+            QLabel { font-size: 14px; color: #8B0000; }
             QToolBar { background: #23272b; border-bottom: 1px solid #263238; }
-            QStatusBar { background: #23272b; border-top: 1px solid #263238; color: #f8fafd; }
-            QTreeWidget { font-size: 14px; background: #23272b; color: #f8fafd; alternate-background-color: #21252b; }
-            QTreeWidget::item:selected { background: #00bcd4; color: #181c1f; }
-            QTreeWidget::item:hover { background: #263238; color: #fff; }
-            QHeaderView::section { background: #263238; color: #f8fafd; border: none; }
-            QProgressBar { border-radius: 8px; background: #23272b; color: #f8fafd; text-align: center; }
+            QStatusBar { background: #23272b; border-top: 1px solid #263238; color: #8B0000; }
+            QTreeWidget { font-size: 14px; background: #23272b; color: #8B0000; alternate-background-color: #21252b; }
+            QTreeWidget::item:selected { background: #00bcd4; color: #8B0000; }
+            QTreeWidget::item:hover { background: #263238; color: #8B0000; }
+            QHeaderView::section { background: #263238; color: #8B0000; border: none; }
+            QProgressBar { border-radius: 8px; background: #23272b; color: #8B0000; text-align: center; }
             QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00bcd4, stop:1 #8bc34a); border-radius: 8px; }
         ''')
 
@@ -167,9 +167,9 @@ class MainWindow(QMainWindow):
     def start_download(self):
         # Allow queuing new downloads even if already downloading
         selected_files = self.get_checked_items()
-        if not selected_files: QMessageBox.warning(self, "No Files", "Please select files to download."); return
+        if not selected_files: self.show_message("No Files", "Please select files to download.", QMessageBox.Warning); return
         download_path = self.download_path_input.text()
-        if not os.path.isdir(download_path): QMessageBox.critical(self, "Invalid Path", "Download directory does not exist."); return
+        if not os.path.isdir(download_path): self.show_message("Invalid Path", "Download directory does not exist.", QMessageBox.Critical); return
         # Create a folder named after the selected directory (unless already exists)
         root_url = self.url_input.text().strip()
         root_dir_name = os.path.basename(root_url.rstrip('/'))
@@ -195,14 +195,14 @@ class MainWindow(QMainWindow):
         if self.is_downloading:
             self.statusBar.showMessage("All downloads finished.", 5000)
             if self.overall_progress.value() >= self.overall_progress.maximum():
-                 QMessageBox.information(self, "Complete", "All downloads completed successfully.")
+                 self.show_message("Complete", "All downloads completed successfully.", QMessageBox.Information)
         self.set_ui_state(False, "Ready"); self.overall_progress.setValue(0); self.overall_progress.setFormat("%p%")
 
     def on_file_download_started(self, worker_id, filename):
         hbox = QHBoxLayout(); status_label = QLabel(f"{filename}: Queued...")
         progress_bar = QProgressBar()
         progress_bar.setMinimumHeight(18)
-        progress_bar.setStyleSheet("QProgressBar { border-radius: 6px; background: #23272b; color: #f8fafd; text-align: center; } QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff9800, stop:1 #ffeb3b); border-radius: 6px; }")
+        progress_bar.setStyleSheet("QProgressBar { border-radius: 6px; background: #23272b; color: #8B0000; text-align: center; } QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff9800, stop:1 #ffeb3b); border-radius: 6px; }")
         buttons = {
             'pause': QPushButton(self.style().standardIcon(QStyle.SP_MediaPause), ""),
             'resume': QPushButton(self.style().standardIcon(QStyle.SP_MediaPlay), ""),
@@ -210,7 +210,7 @@ class MainWindow(QMainWindow):
         }
         for btn in buttons.values():
             btn.setMinimumHeight(18)
-            btn.setStyleSheet("QPushButton { border-radius: 6px; background: #263238; color: #f8fafd; } QPushButton:hover { background: #37474f; color: #fff; }")
+            btn.setStyleSheet("QPushButton { border-radius: 6px; background: #263238; color: #8B0000; } QPushButton:hover { background: #37474f; color: #8B0000; }")
         buttons['pause'].clicked.connect(partial(self.download_manager.pause_file, worker_id))
         buttons['resume'].clicked.connect(partial(self.download_manager.resume_file, worker_id))
         buttons['cancel'].clicked.connect(partial(self.download_manager.cancel_file, worker_id))
@@ -244,7 +244,7 @@ class MainWindow(QMainWindow):
     def fetch_directory_listing(self):
         # Allow fetching new directory listings even if downloads are in progress
         url = self.url_input.text().strip()
-        if not url: QMessageBox.warning(self, "Warning", "Please enter a URL."); return
+        if not url: self.show_message("Warning", "Please enter a URL.", QMessageBox.Warning); return
         self.tree_widget.clear(); self.path_to_item_map.clear()
         self.set_ui_state(False, f"Fetching from {url}..."); self.fetch_button.setEnabled(False); self.cancel_fetch_button.setEnabled(True)
         self.lister_thread = DirectoryLister(url, self.config_manager)
@@ -275,7 +275,7 @@ class MainWindow(QMainWindow):
     
     def on_listing_finished(self):
         self.statusBar.showMessage("Listing complete.", 5000); self.fetch_button.setEnabled(True); self.cancel_fetch_button.setEnabled(False); self.tree_widget.expandToDepth(0)
-    def on_listing_error(self, msg): QMessageBox.critical(self, "Listing Error", f"Could not fetch directory:\n{msg}"); self.statusBar.showMessage(f"Error: {msg}", 5000); self.fetch_button.setEnabled(True); self.cancel_fetch_button.setEnabled(False)
+    def on_listing_error(self, msg): self.show_message("Listing Error", f"Could not fetch directory:\n{msg}", QMessageBox.Critical); self.statusBar.showMessage(f"Error: {msg}", 5000); self.fetch_button.setEnabled(True); self.cancel_fetch_button.setEnabled(False)
 
     def handle_item_check(self, item, column):
         if column == 0:
@@ -318,7 +318,37 @@ class MainWindow(QMainWindow):
         try:
             with open('logs/app.log', 'r') as f: log_content = f.read()
         except Exception as e: log_content = f"Could not read log file: {e}"
-        log_view.setText(log_content); layout.addWidget(log_view); log_dialog.exec_()
+        log_view.setText(log_content); layout.addWidget(log_view)
+        # Apply dark palette to dialog and text edit
+        dark_palette = QPalette()
+        dark_palette.setColor(QPalette.Window, QColor('#23272b'))
+        dark_palette.setColor(QPalette.Base, QColor('#23272b'))
+        dark_palette.setColor(QPalette.Text, QColor('#8B0000'))
+        dark_palette.setColor(QPalette.WindowText, QColor('#8B0000'))
+        log_dialog.setPalette(dark_palette)
+        log_view.setPalette(dark_palette)
+        log_dialog.exec_()
+
+    def show_message(self, title, message, icon=QMessageBox.Information):
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.setIcon(icon)
+        # Apply comprehensive dark palette
+        dark_palette = QPalette()
+        dark_palette.setColor(QPalette.Window, QColor('#23272b'))
+        dark_palette.setColor(QPalette.Base, QColor('#23272b'))
+        dark_palette.setColor(QPalette.Text, QColor('#8B0000'))
+        dark_palette.setColor(QPalette.WindowText, QColor('#8B0000'))
+        dark_palette.setColor(QPalette.Button, QColor('#37474f'))
+        dark_palette.setColor(QPalette.ButtonText, QColor('#8B0000'))
+        dark_palette.setColor(QPalette.Light, QColor('#263238'))
+        dark_palette.setColor(QPalette.Midlight, QColor('#263238'))
+        dark_palette.setColor(QPalette.Dark, QColor('#181c1f'))
+        dark_palette.setColor(QPalette.Mid, QColor('#263238'))
+        dark_palette.setColor(QPalette.AlternateBase, QColor('#21252b'))
+        msg_box.setPalette(dark_palette)
+        msg_box.exec_()
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls(): event.acceptProposedAction()
@@ -327,7 +357,27 @@ class MainWindow(QMainWindow):
         
     def closeEvent(self, event):
         if self.is_downloading:
-            if QMessageBox.question(self, 'Confirm Exit', "Downloads are in progress. Are you sure you want to exit?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.No:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle('Confirm Exit')
+            msg_box.setText("Downloads are in progress. Are you sure you want to exit?")
+            msg_box.setIcon(QMessageBox.Question)
+            msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg_box.setDefaultButton(QMessageBox.No)
+            # Apply dark palette
+            dark_palette = QPalette()
+            dark_palette.setColor(QPalette.Window, QColor('#23272b'))
+            dark_palette.setColor(QPalette.Base, QColor('#23272b'))
+            dark_palette.setColor(QPalette.Text, QColor('#8B0000'))
+            dark_palette.setColor(QPalette.WindowText, QColor('#8B0000'))
+            dark_palette.setColor(QPalette.Button, QColor('#37474f'))
+            dark_palette.setColor(QPalette.ButtonText, QColor('#8B0000'))
+            dark_palette.setColor(QPalette.Light, QColor('#263238'))
+            dark_palette.setColor(QPalette.Midlight, QColor('#263238'))
+            dark_palette.setColor(QPalette.Dark, QColor('#181c1f'))
+            dark_palette.setColor(QPalette.Mid, QColor('#263238'))
+            dark_palette.setColor(QPalette.AlternateBase, QColor('#21252b'))
+            msg_box.setPalette(dark_palette)
+            if msg_box.exec_() == QMessageBox.No:
                 event.ignore(); return
         self.cancel_downloads()
         if self.lister_thread and self.lister_thread.isRunning(): self.lister_thread.quit(); self.lister_thread.wait()

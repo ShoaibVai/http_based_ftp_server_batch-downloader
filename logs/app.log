@@ -86,3 +86,24 @@
 2025-07-20 03:09:46,219 - utils.logger - INFO - Logger initialized.
 2025-07-20 03:10:13,829 - config.manager - INFO - Settings saved to config.json
 2025-07-20 03:10:13,829 - utils.logger - INFO - Application closing.
+2025-07-20 03:28:46,680 - utils.logger - INFO - Logger initialized.
+2025-07-20 03:28:56,058 - core.lister - ERROR - HTTP error for https://animepahe.ru/: 403 Client Error: Forbidden for url: https://animepahe.ru/
+2025-07-20 03:29:06,672 - core.lister - ERROR - HTTP error for https://animepahe.ru/play/05da70df-dd24-0a25-0115-e8448a85abfe/6ae74dc59896cf30cb07fa3fd834dbcb9250da08a4b567d627759f35dbb8ca54: 403 Client Error: Forbidden for url: https://animepahe.ru/play/05da70df-dd24-0a25-0115-e8448a85abfe/6ae74dc59896cf30cb07fa3fd834dbcb9250da08a4b567d627759f35dbb8ca54
+2025-07-20 03:29:18,720 - config.manager - INFO - Settings saved to config.json
+2025-07-20 03:29:18,720 - utils.logger - INFO - Application closing.
+2025-07-20 03:30:57,067 - utils.logger - INFO - Logger initialized.
+2025-07-20 03:31:02,377 - core.lister - ERROR - HTTP error for https://animepahe.ru/play/05da70df-dd24-0a25-0115-e8448a85abfe/6ae74dc59896cf30cb07fa3fd834dbcb9250da08a4b567d627759f35dbb8ca54: 403 Client Error: Forbidden for url: https://animepahe.ru/play/05da70df-dd24-0a25-0115-e8448a85abfe/6ae74dc59896cf30cb07fa3fd834dbcb9250da08a4b567d627759f35dbb8ca54
+2025-07-20 03:31:10,171 - config.manager - INFO - Settings saved to config.json
+2025-07-20 03:31:10,171 - utils.logger - INFO - Application closing.
+2025-07-20 03:31:51,420 - utils.logger - INFO - Logger initialized.
+2025-07-20 03:31:54,609 - core.lister - ERROR - HTTP error for https://animepahe.ru/play/05da70df-dd24-0a25-0115-e8448a85abfe/6ae74dc59896cf30cb07fa3fd834dbcb9250da08a4b567d627759f35dbb8ca54: 403 Client Error: Forbidden for url: https://animepahe.ru/play/05da70df-dd24-0a25-0115-e8448a85abfe/6ae74dc59896cf30cb07fa3fd834dbcb9250da08a4b567d627759f35dbb8ca54
+2025-07-20 03:32:17,864 - config.manager - INFO - Settings saved to config.json
+2025-07-20 03:32:17,864 - utils.logger - INFO - Application closing.
+2025-07-20 03:33:49,862 - utils.logger - INFO - Logger initialized.
+2025-07-20 03:33:56,156 - core.lister - ERROR - HTTP error for https://animepahe.ru/: 403 Client Error: Forbidden for url: https://animepahe.ru/
+2025-07-20 03:34:12,145 - config.manager - INFO - Settings saved to config.json
+2025-07-20 03:34:12,145 - utils.logger - INFO - Application closing.
+2025-07-20 03:34:56,466 - utils.logger - INFO - Logger initialized.
+2025-07-20 03:35:11,361 - core.lister - ERROR - HTTP error for https://animepahe.ru/play/05da70df-dd24-0a25-0115-e8448a85abfe/6ae74dc59896cf30cb07fa3fd834dbcb9250da08a4b567d627759f35dbb8ca54: 403 Client Error: Forbidden for url: https://animepahe.ru/play/05da70df-dd24-0a25-0115-e8448a85abfe/6ae74dc59896cf30cb07fa3fd834dbcb9250da08a4b567d627759f35dbb8ca54
+2025-07-20 03:35:16,635 - config.manager - INFO - Settings saved to config.json
+2025-07-20 03:35:16,635 - utils.logger - INFO - Application closing.
