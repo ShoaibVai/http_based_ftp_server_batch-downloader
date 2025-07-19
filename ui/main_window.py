@@ -68,7 +68,7 @@ class MainWindow(QMainWindow):
         self.overall_progress = QProgressBar(); self.overall_progress.setTextVisible(True); self.overall_progress.setValue(0)
         self.overall_progress.setFormat("%p%")
         self.overall_progress.setMinimumHeight(24)
-        self.overall_progress.setStyleSheet("QProgressBar { border-radius: 8px; background: #23272b; color: #f5f5f5; } QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00bcd4, stop:1 #8bc34a); border-radius: 8px; }")
+        self.overall_progress.setStyleSheet("QProgressBar { border-radius: 8px; background: #23272b; color: #f8fafd; text-align: center; } QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00bcd4, stop:1 #8bc34a); border-radius: 8px; }")
         overall_progress_layout.addWidget(self.overall_progress); progress_layout.addLayout(overall_progress_layout)
         self.per_file_progress_layout = QVBoxLayout(); progress_layout.addLayout(self.per_file_progress_layout)
         progress_layout.addStretch(); splitter.addWidget(progress_frame); splitter.setSizes([500, 300])
@@ -92,19 +92,21 @@ class MainWindow(QMainWindow):
         self.spinner_label.setVisible(False)
         main_layout.addWidget(self.spinner_label, alignment=Qt.AlignRight)
 
-        # Apply a modern, playful dark stylesheet to the whole window
+        # Improved dark theme for better contrast and accessibility
         self.setStyleSheet('''
             QMainWindow { background: #181c1f; }
-            QPushButton { border-radius: 8px; padding: 6px 16px; font-size: 14px; background: #23272b; color: #f5f5f5; }
-            QPushButton:pressed { background: #263238; }
-            QPushButton:hover { background: #37474f; }
-            QLineEdit { border: 1px solid #37474f; border-radius: 8px; padding: 4px 8px; font-size: 14px; background: #23272b; color: #f5f5f5; }
-            QLabel { font-size: 14px; color: #f5f5f5; }
+            QPushButton { border-radius: 8px; padding: 6px 16px; font-size: 14px; background: #23272b; color: #f8fafd; }
+            QPushButton:pressed { background: #263238; color: #fff; }
+            QPushButton:hover { background: #37474f; color: #fff; }
+            QLineEdit { border: 1px solid #37474f; border-radius: 8px; padding: 4px 8px; font-size: 14px; background: #23272b; color: #f8fafd; selection-background-color: #00bcd4; selection-color: #181c1f; }
+            QLabel { font-size: 14px; color: #f8fafd; }
             QToolBar { background: #23272b; border-bottom: 1px solid #263238; }
-            QStatusBar { background: #23272b; border-top: 1px solid #263238; color: #f5f5f5; }
-            QTreeWidget { font-size: 14px; background: #23272b; color: #f5f5f5; alternate-background-color: #21252b; }
-            QTreeWidget::item:selected { background: #263238; color: #ffeb3b; }
-            QProgressBar { border-radius: 8px; background: #23272b; color: #f5f5f5; }
+            QStatusBar { background: #23272b; border-top: 1px solid #263238; color: #f8fafd; }
+            QTreeWidget { font-size: 14px; background: #23272b; color: #f8fafd; alternate-background-color: #21252b; }
+            QTreeWidget::item:selected { background: #00bcd4; color: #181c1f; }
+            QTreeWidget::item:hover { background: #263238; color: #fff; }
+            QHeaderView::section { background: #263238; color: #f8fafd; border: none; }
+            QProgressBar { border-radius: 8px; background: #23272b; color: #f8fafd; text-align: center; }
             QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00bcd4, stop:1 #8bc34a); border-radius: 8px; }
         ''')
 
@@ -200,7 +202,7 @@ class MainWindow(QMainWindow):
         hbox = QHBoxLayout(); status_label = QLabel(f"{filename}: Queued...")
         progress_bar = QProgressBar()
         progress_bar.setMinimumHeight(18)
-        progress_bar.setStyleSheet("QProgressBar { border-radius: 6px; background: #23272b; color: #f5f5f5; } QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff9800, stop:1 #ffeb3b); border-radius: 6px; }")
+        progress_bar.setStyleSheet("QProgressBar { border-radius: 6px; background: #23272b; color: #f8fafd; text-align: center; } QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff9800, stop:1 #ffeb3b); border-radius: 6px; }")
         buttons = {
             'pause': QPushButton(self.style().standardIcon(QStyle.SP_MediaPause), ""),
             'resume': QPushButton(self.style().standardIcon(QStyle.SP_MediaPlay), ""),
@@ -208,7 +210,7 @@ class MainWindow(QMainWindow):
         }
         for btn in buttons.values():
             btn.setMinimumHeight(18)
-            btn.setStyleSheet("QPushButton { border-radius: 6px; background: #263238; color: #f5f5f5; } QPushButton:hover { background: #37474f; }")
+            btn.setStyleSheet("QPushButton { border-radius: 6px; background: #263238; color: #f8fafd; } QPushButton:hover { background: #37474f; color: #fff; }")
         buttons['pause'].clicked.connect(partial(self.download_manager.pause_file, worker_id))
         buttons['resume'].clicked.connect(partial(self.download_manager.resume_file, worker_id))
         buttons['cancel'].clicked.connect(partial(self.download_manager.cancel_file, worker_id))
