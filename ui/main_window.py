@@ -1,0 +1,298 @@
+# ui/main_window.py
+# This file defines the main window of the application using PyQt5.
+
+import os
+import logging
+from functools import partial
+from PyQt5.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, 
+    QTreeWidget, QTreeWidgetItem, QProgressBar, QLabel, QFileDialog, QMessageBox, 
+    QSplitter, QFrame, QAction, QToolBar, QStatusBar, QSpinBox, QDialog, 
+    QTextEdit, QApplication, QStyle, QTreeWidgetItemIterator, QSizePolicy
+)
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QIcon
+
+from core.lister import DirectoryLister
+from core.downloader import DownloadManager
+from config.manager import ConfigManager
+from utils.logger import setup_logger
+
+logger = setup_logger()
+
+def format_bytes(size):
+    """Formats bytes into KB, MB, GB, etc."""
+    if size <= 0: return "0 B"
+    power, n, labels = 1024, 0, {0: '', 1: 'K', 2: 'M', 3: 'G', 4: 'T'}
+    while size >= power and n < len(labels) -1:
+        size /= power
+        n += 1
+    return f"{size:.2f} {labels[n]}B"
+
+class MainWindow(QMainWindow):
+    """The main window for the FTP Batch Downloader application."""
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("FTP Batch Downloader")
+        self.setGeometry(100, 100, 1200, 800)
+        self.setAcceptDrops(True)
+        self.config_manager = ConfigManager()
+        self.download_manager = DownloadManager(self.config_manager)
+        self.init_ui()
+        self.create_actions()
+        self.create_toolbars()
+        self.create_status_bar()
+        self.lister_thread, self.path_to_item_map, self.file_progress_widgets = None, {}, {}
+        self.is_downloading = False
+        self.connect_signals()
+
+    def init_ui(self):
+        central_widget = QWidget(); self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget); url_layout = QHBoxLayout()
+        self.url_input = QLineEdit(); self.url_input.setPlaceholderText("Drag & Drop or Paste FTP/HTTP URL...")
+        self.url_input.setClearButtonEnabled(True)
+        self.fetch_button = QPushButton("Fetch"); self.fetch_button.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
+        self.cancel_fetch_button = QPushButton("Cancel Fetch"); self.cancel_fetch_button.setEnabled(False)
+        url_layout.addWidget(self.url_input); url_layout.addWidget(self.fetch_button); url_layout.addWidget(self.cancel_fetch_button); main_layout.addLayout(url_layout)
+        splitter = QSplitter(Qt.Vertical); main_layout.addWidget(splitter)
+        self.tree_widget = QTreeWidget(); self.tree_widget.setHeaderLabels(["Name", "Size", "Type", "Modified"])
+        self.tree_widget.setColumnWidth(0, 500); self.tree_widget.setColumnWidth(1, 120); self.tree_widget.setColumnWidth(2, 120)
+        splitter.addWidget(self.tree_widget)
+        progress_frame = QFrame(); progress_layout = QVBoxLayout(progress_frame)
+        overall_progress_layout = QHBoxLayout(); overall_progress_layout.addWidget(QLabel("Overall Progress:"))
+        self.overall_progress = QProgressBar(); self.overall_progress.setTextVisible(True); self.overall_progress.setValue(0)
+        self.overall_progress.setFormat("%p%")
+        overall_progress_layout.addWidget(self.overall_progress); progress_layout.addLayout(overall_progress_layout)
+        self.per_file_progress_layout = QVBoxLayout(); progress_layout.addLayout(self.per_file_progress_layout)
+        progress_layout.addStretch(); splitter.addWidget(progress_frame); splitter.setSizes([500, 300])
+        download_controls_layout = QHBoxLayout()
+        self.download_path_input = QLineEdit(self.config_manager.get("default_download_path"))
+        self.browse_button = QPushButton("Browse..."); self.download_button = QPushButton("Download")
+        self.download_button.setIcon(self.style().standardIcon(QStyle.SP_ArrowDown))
+        download_controls_layout.addWidget(QLabel("Download To:")); download_controls_layout.addWidget(self.download_path_input)
+        download_controls_layout.addWidget(self.browse_button); download_controls_layout.addWidget(self.download_button)
+        main_layout.addLayout(download_controls_layout)
+
+    def connect_signals(self):
+        self.browse_button.clicked.connect(self.browse_download_path)
+        self.download_button.clicked.connect(self.start_download)
+        self.fetch_button.clicked.connect(self.fetch_directory_listing)
+        self.cancel_fetch_button.clicked.connect(self.cancel_fetch)
+        self.tree_widget.itemChanged.connect(self.handle_item_check)
+        self.download_manager.file_started.connect(self.on_file_download_started)
+        self.download_manager.file_progress.connect(self.on_file_progress)
+        self.download_manager.file_finished.connect(self.on_file_download_finished)
+        self.download_manager.file_status_changed.connect(self.on_file_status_changed)
+        self.download_manager.overall_progress.connect(self.on_overall_progress)
+        self.download_manager.all_finished.connect(self.on_all_downloads_finished)
+        self.download_manager.error.connect(self.on_download_error)
+        self.download_manager.size_calc_progress.connect(self.on_size_calc_progress)
+        self.download_manager.size_calc_finished.connect(self.on_size_calc_finished)
+
+    def create_actions(self):
+        self.pause_all_action = QAction(self.style().standardIcon(QStyle.SP_MediaPause), "Pause All", self)
+        self.resume_all_action = QAction(self.style().standardIcon(QStyle.SP_MediaPlay), "Resume All", self)
+        self.cancel_action = QAction(self.style().standardIcon(QStyle.SP_MediaStop), "Cancel All", self)
+        self.view_log_action = QAction(self.style().standardIcon(QStyle.SP_FileIcon), "View Log", self)
+        self.pause_all_action.triggered.connect(self.download_manager.pause_all)
+        self.resume_all_action.triggered.connect(self.download_manager.resume_all)
+        self.cancel_action.triggered.connect(self.cancel_downloads)
+        self.view_log_action.triggered.connect(self.show_error_log)
+
+    def create_toolbars(self):
+        toolbar = QToolBar("Main Toolbar"); self.addToolBar(toolbar)
+        toolbar.addAction(self.pause_all_action); toolbar.addAction(self.resume_all_action); toolbar.addAction(self.cancel_action)
+        toolbar.addSeparator(); toolbar.addAction(self.view_log_action)
+        spacer = QWidget(); spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred); toolbar.addWidget(spacer)
+        toolbar.addWidget(QLabel("Concurrent:")); self.concurrency_spinbox = QSpinBox()
+        self.concurrency_spinbox.setRange(1, 16); self.concurrency_spinbox.setValue(self.config_manager.get("max_concurrent_downloads"))
+        self.concurrency_spinbox.valueChanged.connect(lambda val: self.config_manager.set("max_concurrent_downloads", val))
+        toolbar.addWidget(self.concurrency_spinbox)
+
+    def create_status_bar(self):
+        self.statusBar = QStatusBar(); self.setStatusBar(self.statusBar); self.statusBar.showMessage("Ready")
+
+    def set_ui_state(self, downloading: bool, message: str = ""):
+        self.is_downloading = downloading
+        for action in [self.cancel_action, self.pause_all_action, self.resume_all_action]: action.setEnabled(downloading)
+        for widget in [self.download_button, self.fetch_button, self.url_input, self.browse_button]: widget.setEnabled(not downloading)
+        if message: self.statusBar.showMessage(message)
+
+    def start_download(self):
+        if self.is_downloading: return
+        selected_files = self.get_checked_items()
+        if not selected_files: QMessageBox.warning(self, "No Files", "Please select files to download."); return
+        download_path = self.download_path_input.text()
+        if not os.path.isdir(download_path): QMessageBox.critical(self, "Invalid Path", "Download directory does not exist."); return
+        # Create a folder named after the selected directory (unless already exists)
+        root_url = self.url_input.text().strip()
+        root_dir_name = os.path.basename(root_url.rstrip('/'))
+        base_folder = os.path.join(download_path, root_dir_name)
+        os.makedirs(base_folder, exist_ok=True)
+        self.set_ui_state(True, "Calculating total download size...")
+        # Clear previous progress widgets
+        for i in reversed(range(self.per_file_progress_layout.count())): 
+            item = self.per_file_progress_layout.takeAt(i)
+            if item.widget(): item.widget().deleteLater()
+            elif item.layout():
+                while item.layout().count():
+                    child = item.layout().takeAt(0)
+                    if child.widget(): child.widget().deleteLater()
+        self.file_progress_widgets.clear()
+        # Pass (url, rel_path) and base_folder to the download manager
+        self.download_manager.start_downloads(selected_files, base_folder)
+
+    def on_size_calc_progress(self, processed, total): self.statusBar.showMessage(f"Calculating size... ({processed}/{total} files)")
+    def on_size_calc_finished(self): self.statusBar.showMessage("Starting downloads...")
+
+    def on_overall_progress(self, downloaded_bytes, total_bytes):
+        if total_bytes > 0:
+            self.overall_progress.setMaximum(total_bytes)
+            self.overall_progress.setValue(downloaded_bytes)
+            self.overall_progress.setFormat(f"%p% ({format_bytes(downloaded_bytes)} / {format_bytes(total_bytes)})")
+        self.statusBar.showMessage(f"Downloading... {format_bytes(downloaded_bytes)} / {format_bytes(total_bytes)}")
+
+    def on_all_downloads_finished(self):
+        if self.is_downloading:
+            self.statusBar.showMessage("All downloads finished.", 5000)
+            if self.overall_progress.value() >= self.overall_progress.maximum():
+                 QMessageBox.information(self, "Complete", "All downloads completed successfully.")
+        self.set_ui_state(False, "Ready"); self.overall_progress.setValue(0); self.overall_progress.setFormat("%p%")
+
+    def on_file_download_started(self, worker_id, filename):
+        hbox = QHBoxLayout(); status_label = QLabel(f"{filename}: Queued...")
+        progress_bar = QProgressBar()
+        buttons = {
+            'pause': QPushButton(self.style().standardIcon(QStyle.SP_MediaPause), ""),
+            'resume': QPushButton(self.style().standardIcon(QStyle.SP_MediaPlay), ""),
+            'cancel': QPushButton(self.style().standardIcon(QStyle.SP_MediaStop), "")
+        }
+        buttons['pause'].clicked.connect(partial(self.download_manager.pause_file, worker_id))
+        buttons['resume'].clicked.connect(partial(self.download_manager.resume_file, worker_id))
+        buttons['cancel'].clicked.connect(partial(self.download_manager.cancel_file, worker_id))
+        hbox.addWidget(status_label, 4); hbox.addWidget(progress_bar, 6)
+        for btn in buttons.values(): hbox.addWidget(btn)
+        self.per_file_progress_layout.addLayout(hbox)
+        self.file_progress_widgets[worker_id] = {'layout': hbox, 'label': status_label, 'progress': progress_bar, **buttons}
+
+    def on_file_progress(self, worker_id, downloaded_bytes, total_bytes):
+        if worker_id in self.file_progress_widgets:
+            widgets = self.file_progress_widgets[worker_id]
+            if total_bytes > 0:
+                if widgets['progress'].maximum() != total_bytes: widgets['progress'].setMaximum(total_bytes)
+                widgets['progress'].setValue(downloaded_bytes)
+                widgets['progress'].setFormat(f"%p% ({format_bytes(downloaded_bytes)}/{format_bytes(total_bytes)})")
+            else: widgets['progress'].setFormat(f"{format_bytes(downloaded_bytes)} downloaded")
+
+    def on_file_status_changed(self, worker_id, status):
+        if worker_id in self.file_progress_widgets:
+            widgets = self.file_progress_widgets[worker_id]
+            widgets['label'].setText(f"{os.path.basename(worker_id)}: {status}")
+            widgets['pause'].setEnabled(status in ["Downloading", "Retrying..."])
+            widgets['resume'].setEnabled(status == "Paused")
+            widgets['cancel'].setEnabled(status not in ["Completed", "Canceled", "Error"])
+
+    def on_file_download_finished(self, worker_id, filename):
+        self.on_file_status_changed(worker_id, "Completed"); logger.info(f"Finished downloading {filename}")
+    def on_download_error(self, filename, message): logger.error(f"Error downloading {filename}: {message}")
+    def cancel_downloads(self): self.statusBar.showMessage("Canceling..."); self.download_manager.cancel_all()
+
+    def fetch_directory_listing(self):
+        if self.is_downloading: QMessageBox.warning(self, "Busy", "Cannot fetch while downloads are in progress."); return
+        url = self.url_input.text().strip()
+        if not url: QMessageBox.warning(self, "Warning", "Please enter a URL."); return
+        self.tree_widget.clear(); self.path_to_item_map.clear()
+        self.set_ui_state(False, f"Fetching from {url}..."); self.fetch_button.setEnabled(False); self.cancel_fetch_button.setEnabled(True)
+        self.lister_thread = DirectoryLister(url, self.config_manager)
+        self.lister_thread.item_found.connect(self.add_tree_item)
+        self.lister_thread.error.connect(self.on_listing_error)
+        self.lister_thread.finished.connect(self.on_listing_finished)
+        self.lister_thread.start()
+
+    def add_tree_item(self, item_data):
+        # Normalize paths: remove trailing slashes except for root
+        def norm_path(path):
+            if path == '/':
+                return '/'
+            return path.rstrip('/')
+
+        # On first call, ensure the root directory is mapped to the invisible root
+        if not self.path_to_item_map:
+            root_path = os.path.dirname(norm_path(item_data['path']))
+            self.path_to_item_map[root_path] = self.tree_widget.invisibleRootItem()
+
+        parent_path = os.path.dirname(norm_path(item_data['path']))
+        parent_item = self.path_to_item_map.get(parent_path, self.tree_widget.invisibleRootItem())
+        tree_item = QTreeWidgetItem(parent_item, [item_data['name'], str(item_data['size']), item_data['type'], item_data['modified']])
+        tree_item.setFlags(tree_item.flags() | Qt.ItemIsUserCheckable); tree_item.setCheckState(0, Qt.Unchecked)
+        tree_item.setData(0, Qt.UserRole, item_data['path'])
+        if item_data['type'] == 'Directory':
+            self.path_to_item_map[norm_path(item_data['path'])] = tree_item
+    
+    def on_listing_finished(self):
+        self.statusBar.showMessage("Listing complete.", 5000); self.fetch_button.setEnabled(True); self.cancel_fetch_button.setEnabled(False); self.tree_widget.expandToDepth(0)
+    def on_listing_error(self, msg): QMessageBox.critical(self, "Listing Error", f"Could not fetch directory:\n{msg}"); self.statusBar.showMessage(f"Error: {msg}", 5000); self.fetch_button.setEnabled(True); self.cancel_fetch_button.setEnabled(False)
+
+    def handle_item_check(self, item, column):
+        if column == 0:
+            self.tree_widget.blockSignals(True)
+            check_state = item.checkState(0)
+            def set_check_state_recursive(parent, check_state):
+                for i in range(parent.childCount()):
+                    child = parent.child(i)
+                    child.setCheckState(0, check_state)
+                    set_check_state_recursive(child, check_state)
+            set_check_state_recursive(item, check_state)
+            self.tree_widget.blockSignals(False)
+
+    def get_checked_items(self):
+        checked = []
+        iterator = QTreeWidgetItemIterator(self.tree_widget, QTreeWidgetItemIterator.All)
+        # Determine the root path (the directory the user fetched)
+        root_url = self.url_input.text().strip()
+        root_path = root_url if root_url.endswith('/') else root_url + '/'
+        while iterator.value():
+            item = iterator.value()
+            if item.checkState(0) == Qt.Checked and item.text(2) != "Directory":
+                url = item.data(0, Qt.UserRole)
+                # Compute relative path from the root directory
+                if url.startswith(root_path):
+                    rel_path = url[len(root_path):].lstrip('/')
+                else:
+                    rel_path = os.path.basename(url)
+                checked.append((url, rel_path))
+            iterator += 1
+        return checked
+
+    def browse_download_path(self):
+        path = QFileDialog.getExistingDirectory(self, "Select Download Directory", self.download_path_input.text())
+        if path: self.download_path_input.setText(path); self.config_manager.set("default_download_path", path)
+
+    def show_error_log(self):
+        log_dialog = QDialog(self); log_dialog.setWindowTitle("Error Log"); log_dialog.setGeometry(200, 200, 800, 600)
+        layout = QVBoxLayout(log_dialog); log_view = QTextEdit(); log_view.setReadOnly(True)
+        try:
+            with open('logs/app.log', 'r') as f: log_content = f.read()
+        except Exception as e: log_content = f"Could not read log file: {e}"
+        log_view.setText(log_content); layout.addWidget(log_view); log_dialog.exec_()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls(): event.acceptProposedAction()
+    def dropEvent(self, event):
+        if event.mimeData().urls(): self.url_input.setText(event.mimeData().urls()[0].toString()); self.fetch_directory_listing()
+        
+    def closeEvent(self, event):
+        if self.is_downloading:
+            if QMessageBox.question(self, 'Confirm Exit', "Downloads are in progress. Are you sure you want to exit?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.No:
+                event.ignore(); return
+        self.cancel_downloads()
+        if self.lister_thread and self.lister_thread.isRunning(): self.lister_thread.quit(); self.lister_thread.wait()
+        self.config_manager.save_settings()
+        logger.info("Application closing."); event.accept()
+
+    def cancel_fetch(self):
+        if self.lister_thread:
+            self.lister_thread.cancel()
+        self.cancel_fetch_button.setEnabled(False)
+        self.fetch_button.setEnabled(True)
+        self.statusBar.showMessage("Fetch cancelled.")

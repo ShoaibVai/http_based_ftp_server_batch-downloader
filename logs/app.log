@@ -1,0 +1,43 @@
+2025-07-20 01:31:45,839 - utils.logger - INFO - Logger initialized.
+2025-07-20 01:35:44,363 - utils.logger - INFO - Logger initialized.
+2025-07-20 01:36:24,237 - utils.logger - INFO - Logger initialized.
+2025-07-20 01:38:06,602 - utils.logger - INFO - Logger initialized.
+2025-07-20 01:38:26,965 - utils.logger - INFO - Logger initialized.
+2025-07-20 01:38:50,129 - utils.logger - INFO - Logger initialized.
+2025-07-20 01:39:29,513 - utils.logger - INFO - Logger initialized.
+2025-07-20 01:40:09,453 - utils.logger - INFO - Logger initialized.
+2025-07-20 01:40:56,860 - utils.logger - INFO - Logger initialized.
+2025-07-20 01:41:35,601 - utils.logger - INFO - Logger initialized.
+2025-07-20 01:42:48,128 - utils.logger - INFO - Logger initialized.
+2025-07-20 01:43:08,581 - core.lister - ERROR - HTTP error for https://larsjung.de/lrsjng/h5ai/commits/master/: 404 Client Error: Not Found for url: https://larsjung.de/lrsjng/h5ai/commits/master/
+2025-07-20 01:43:09,546 - core.lister - ERROR - HTTP error for https://larsjung.de/lrsjng/h5ai/commits/master/: 404 Client Error: Not Found for url: https://larsjung.de/lrsjng/h5ai/commits/master/
+2025-07-20 01:43:13,686 - core.lister - ERROR - HTTP error for https://release.larsjung.de/h5ai/: 404 Client Error: Not Found for url: https://release.larsjung.de/h5ai/
+2025-07-20 01:43:14,649 - core.lister - ERROR - HTTP error for https://release.larsjung.de/h5ai/develop/: 404 Client Error: Not Found for url: https://release.larsjung.de/h5ai/develop/
+2025-07-20 01:44:12,463 - config.manager - INFO - Settings saved to config.json
+2025-07-20 01:44:16,838 - utils.logger - INFO - Finished downloading security
+2025-07-20 01:44:44,421 - utils.logger - INFO - Finished downloading security
+2025-07-20 01:57:51,966 - utils.logger - INFO - Logger initialized.
+2025-07-20 01:58:28,884 - utils.logger - INFO - Logger initialized.
+2025-07-20 01:59:58,590 - utils.logger - INFO - Logger initialized.
+2025-07-20 02:01:21,266 - utils.logger - INFO - Logger initialized.
+2025-07-20 02:02:40,590 - config.manager - INFO - Settings saved to config.json
+2025-07-20 02:02:40,590 - utils.logger - INFO - Application closing.
+2025-07-20 02:04:56,859 - utils.logger - INFO - Logger initialized.
+2025-07-20 02:11:58,995 - config.manager - INFO - Settings saved to config.json
+2025-07-20 02:11:58,995 - utils.logger - INFO - Application closing.
+2025-07-20 02:25:21,977 - utils.logger - INFO - Logger initialized.
+2025-07-20 02:25:34,376 - config.manager - INFO - Settings saved to config.json
+2025-07-20 02:25:34,376 - utils.logger - INFO - Application closing.
+2025-07-20 02:26:19,109 - utils.logger - INFO - Logger initialized.
+2025-07-20 02:27:00,315 - config.manager - INFO - Settings saved to config.json
+2025-07-20 02:27:00,315 - utils.logger - INFO - Application closing.
+2025-07-20 02:28:48,819 - utils.logger - INFO - Logger initialized.
+2025-07-20 02:30:42,727 - utils.logger - INFO - Finished downloading Spiderman%20-%20201%20-%20Neogenic%20Nightmare%2C%20Chapter%20I%20-%20The%20Insidisious%20Six.avi
+2025-07-20 02:30:44,730 - utils.logger - INFO - Finished downloading Spiderman%20-%20203%20-%20Neogenic%20Nightmare%2C%20Chapter%20III%20-%20Hydro-Man.avi
+2025-07-20 02:30:50,276 - utils.logger - INFO - Finished downloading Spiderman%20-%20202%20-%20Neogenic%20Nightmare%2C%20Chapter%20II%20-%20Battle%20Of%20the%20Insidious%20Six.avi
+2025-07-20 02:31:16,636 - utils.logger - INFO - Finished downloading Spiderman%20-%20204%20-%20Neogenic%20Nightmare%2C%20Chapter%20IV%20-%20The%20Mutant%20Agenda.avi
+2025-07-20 02:31:38,094 - utils.logger - INFO - Finished downloading Spiderman%20-%20205%20-%20Neogenic%20Nightmare%2C%20Chapter%20V%20-%20Mutants%20Revenge.avi
+2025-07-20 02:31:59,017 - utils.logger - INFO - Finished downloading Spiderman%20-%20301%20-%20Sins%20of%20the%20Fathers%2C%20Chapter%20I%20-%20Doctor%20Strange.avi
+2025-07-20 02:32:03,828 - utils.logger - INFO - Finished downloading Spiderman%20-%20302%20-%20Sins%20of%20the%20Fathers%2C%20Chapter%20II%20-%20Make%20a%20Wish.avi
+2025-07-20 02:32:06,228 - utils.logger - INFO - Finished downloading Spiderman%20-%20303%20-%20Sins%20of%20the%20Fathers%2C%20Chapter%20III%20-%20Attack%20of%20the%20Octo-Bot.avi
+2025-07-20 02:32:17,413 - utils.logger - INFO - Finished downloading Spiderman%20-%20304%20-%20Sins%20of%20the%20Fathers%2C%20Chapter%20IV%20-%20Enter%20the%20Green%20Goblin.avi

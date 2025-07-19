@@ -1,0 +1,195 @@
+# core/downloader.py
+# This module contains the DownloadManager and DownloadWorker for handling file downloads.
+
+import os
+import logging
+import time
+from urllib.parse import urlparse
+import requests
+from ftplib import FTP, error_perm
+from PyQt5.QtCore import QObject, QThread, pyqtSignal, QMutex, QWaitCondition, QMutexLocker
+
+from .utils import SizeCalculator
+
+logger = logging.getLogger(__name__)
+
+class DownloadWorker(QThread):
+    """A QThread that handles the download of a single file."""
+    progress = pyqtSignal(str, int, int)
+    finished = pyqtSignal(str, int)
+    error = pyqtSignal(str, str)
+    status_changed = pyqtSignal(str, str)
+
+    def __init__(self, worker_id, url, rel_path, base_folder, config, total_size=0):
+        super().__init__()
+        self.worker_id, self.url, self.rel_path, self.base_folder, self.config, self.total_size = worker_id, url, rel_path, base_folder, config, total_size
+        self.parsed_url = urlparse(self.url)
+        self._is_running, self._is_paused = True, False
+        self.mutex, self.pause_cond = QMutex(), QWaitCondition()
+        self.bytes_downloaded_this_session = 0
+
+    def run(self):
+        if not self._is_running: return
+        self.status_changed.emit(self.worker_id, "Downloading")
+        for attempt in range(self.config.get('retry_attempts', 3)):
+            if not self._is_running: break
+            try:
+                if self.parsed_url.scheme.lower() in ('http', 'https'): self._download_http()
+                elif self.parsed_url.scheme.lower() in ('ftp', ''): self._download_ftp()
+                else: raise ValueError(f"Unsupported scheme: {self.parsed_url.scheme}")
+                break
+            except Exception as e:
+                logger.error(f"Attempt {attempt + 1} failed for {self.url}: {e}")
+                if attempt + 1 >= self.config.get('retry_attempts', 3): self.error.emit(self.worker_id, str(e))
+                else:
+                    self.status_changed.emit(self.worker_id, f"Retrying ({attempt+1})...")
+                    time.sleep(self.config.get('retry_delay', 5))
+        if self._is_running: self.finished.emit(self.worker_id, self.bytes_downloaded_this_session)
+
+    def _download_http(self):
+        local_filename = os.path.join(self.base_folder, self.rel_path)
+        headers, resumed_bytes = {}, 0
+        if os.path.exists(local_filename):
+            resumed_bytes = os.path.getsize(local_filename)
+            headers['Range'] = f'bytes={resumed_bytes}-'
+        with requests.get(self.url, stream=True, headers=headers, timeout=self.config.get('request_timeout')) as r:
+            r.raise_for_status()
+            total_size = self.total_size or int(r.headers.get('content-length', 0)) + resumed_bytes
+            downloaded_bytes = resumed_bytes
+            os.makedirs(os.path.dirname(local_filename), exist_ok=True)
+            with open(local_filename, 'ab' if resumed_bytes > 0 else 'wb') as f:
+                for chunk in r.iter_content(chunk_size=self.config.get('chunk_size')):
+                    with QMutexLocker(self.mutex):
+                        if not self._is_running: return
+                        if self._is_paused: self.pause_cond.wait(self.mutex)
+                    if chunk:
+                        f.write(chunk)
+                        chunk_len = len(chunk)
+                        downloaded_bytes += chunk_len
+                        self.bytes_downloaded_this_session += chunk_len
+                        self.progress.emit(self.worker_id, downloaded_bytes, total_size)
+
+    def _download_ftp(self):
+        local_filename = os.path.join(self.base_folder, self.rel_path)
+        os.makedirs(os.path.dirname(local_filename), exist_ok=True)
+        with FTP(self.parsed_url.netloc, timeout=self.config.get('request_timeout')) as ftp:
+            ftp.login()
+            total_size = self.total_size or ftp.size(self.parsed_url.path)
+            downloaded_bytes = 0
+            if os.path.exists(local_filename): downloaded_bytes = os.path.getsize(local_filename)
+            with open(local_filename, 'ab' if downloaded_bytes > 0 else 'wb') as f:
+                def callback(chunk):
+                    nonlocal downloaded_bytes
+                    with QMutexLocker(self.mutex):
+                        if not self._is_running: raise IOError("Download canceled.")
+                        if self._is_paused: self.pause_cond.wait(self.mutex)
+                    f.write(chunk)
+                    chunk_len = len(chunk)
+                    downloaded_bytes += chunk_len
+                    self.bytes_downloaded_this_session += chunk_len
+                    self.progress.emit(self.worker_id, downloaded_bytes, total_size)
+                ftp.retrbinary(f'RETR {self.parsed_url.path}', callback, blocksize=self.config.get('chunk_size'), rest=downloaded_bytes or None)
+
+    def stop(self):
+        with QMutexLocker(self.mutex):
+            self._is_running = False
+            if self._is_paused: self._is_paused = False; self.pause_cond.wakeAll()
+        self.status_changed.emit(self.worker_id, "Canceled")
+
+    def pause(self):
+        with QMutexLocker(self.mutex):
+            if self._is_running and not self._is_paused: self._is_paused = True; self.status_changed.emit(self.worker_id, "Paused")
+
+    def resume(self):
+        with QMutexLocker(self.mutex):
+            if self._is_paused: self._is_paused = False; self.pause_cond.wakeAll(); self.status_changed.emit(self.worker_id, "Downloading")
+
+class DownloadManager(QObject):
+    """Manages a queue of downloads and a pool of worker threads."""
+    overall_progress = pyqtSignal(int, int)
+    file_started = pyqtSignal(str, str)
+    file_progress = pyqtSignal(str, int, int)
+    file_finished = pyqtSignal(str, str)
+    file_status_changed = pyqtSignal(str, str)
+    all_finished = pyqtSignal()
+    error = pyqtSignal(str, str)
+    size_calc_progress = pyqtSignal(int, int)
+    size_calc_finished = pyqtSignal()
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.download_queue, self.active_workers, self.file_sizes = [], {}, {}
+        self.total_bytes_to_download, self.total_bytes_downloaded = 0, 0
+        self.progress_mutex = QMutex()
+        self.size_calculator = None
+
+    def start_downloads(self, file_tuples, base_folder):
+        # file_tuples: list of (url, rel_path)
+        self.base_folder = base_folder
+        self.active_workers.clear()
+        self.size_calculator = SizeCalculator([url for url, _ in file_tuples], self.config)
+        self.size_calculator.progress.connect(self.size_calc_progress)
+        self.size_calculator.finished.connect(lambda total_size, file_sizes_map: self._on_size_calc_finished(total_size, file_sizes_map, file_tuples))
+        self.size_calculator.error.connect(lambda msg: self.error.emit("Size Calculation", msg))
+        self.size_calculator.start()
+
+    def _on_size_calc_finished(self, total_size, file_sizes_map, file_tuples):
+        self.size_calc_finished.emit()
+        self.total_bytes_to_download, self.total_bytes_downloaded = total_size, 0
+        self.file_sizes = file_sizes_map
+        # Build a queue of (url, rel_path)
+        self.download_queue = [(url, rel_path) for url, rel_path in file_tuples if url in self.file_sizes]
+        if not self.download_queue: self.all_finished.emit()
+        else: self.check_queue()
+
+    def check_queue(self):
+        if not self.download_queue and not self.active_workers:
+            # Use a small tolerance for floating point comparisons
+            if self.total_bytes_downloaded >= self.total_bytes_to_download - 1:
+                self.all_finished.emit()
+            return
+        max_workers = self.config.get('max_concurrent_downloads', 4)
+        while self.download_queue and len(self.active_workers) < max_workers:
+            url, rel_path = self.download_queue.pop(0)
+            worker = DownloadWorker(url, url, rel_path, self.base_folder, self.config, self.file_sizes.get(url, 0))
+            worker.finished.connect(self._on_worker_finished)
+            worker.error.connect(self._on_worker_error)
+            worker.progress.connect(self.file_progress)
+            worker.status_changed.connect(self.file_status_changed)
+            self.active_workers[url] = worker
+            self.file_started.emit(url, os.path.basename(url))
+            worker.start()
+
+    def _on_worker_finished(self, worker_id, bytes_downloaded):
+        with QMutexLocker(self.progress_mutex):
+            self.total_bytes_downloaded += bytes_downloaded
+            self.overall_progress.emit(self.total_bytes_downloaded, self.total_bytes_to_download)
+        if worker_id in self.active_workers:
+            self.file_finished.emit(worker_id, os.path.basename(self.active_workers[worker_id].url))
+            del self.active_workers[worker_id]
+            self.check_queue()
+
+    def _on_worker_error(self, worker_id, message):
+        if worker_id in self.active_workers:
+            self.error.emit(os.path.basename(self.active_workers[worker_id].url), message)
+            self.file_status_changed.emit(worker_id, "Error")
+            del self.active_workers[worker_id]
+            self.check_queue()
+
+    def pause_file(self, worker_id):
+        if worker_id in self.active_workers: self.active_workers[worker_id].pause()
+    def resume_file(self, worker_id):
+        if worker_id in self.active_workers: self.active_workers[worker_id].resume()
+    def cancel_file(self, worker_id):
+        if worker_id in self.active_workers: self.active_workers[worker_id].stop()
+    def pause_all(self):
+        for worker in self.active_workers.values(): worker.pause()
+    def resume_all(self):
+        for worker in self.active_workers.values(): worker.resume()
+    def cancel_all(self):
+        if self.size_calculator and self.size_calculator.isRunning(): self.size_calculator.stop()
+        self.download_queue.clear()
+        for worker in list(self.active_workers.values()): worker.stop()
+        self.active_workers.clear()
+        self.all_finished.emit()
