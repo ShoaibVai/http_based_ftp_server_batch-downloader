@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QApplication, QStyle, QTreeWidgetItemIterator, QSizePolicy
 )
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QMovie
 
 from core.lister import DirectoryLister
 from core.downloader import DownloadManager
@@ -51,27 +51,62 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(central_widget); url_layout = QHBoxLayout()
         self.url_input = QLineEdit(); self.url_input.setPlaceholderText("Drag & Drop or Paste FTP/HTTP URL...")
         self.url_input.setClearButtonEnabled(True)
+        self.url_input.setMinimumHeight(32)
         self.fetch_button = QPushButton("Fetch"); self.fetch_button.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
+        self.fetch_button.setMinimumHeight(32)
         self.cancel_fetch_button = QPushButton("Cancel Fetch"); self.cancel_fetch_button.setEnabled(False)
+        self.cancel_fetch_button.setMinimumHeight(32)
         url_layout.addWidget(self.url_input); url_layout.addWidget(self.fetch_button); url_layout.addWidget(self.cancel_fetch_button); main_layout.addLayout(url_layout)
         splitter = QSplitter(Qt.Vertical); main_layout.addWidget(splitter)
         self.tree_widget = QTreeWidget(); self.tree_widget.setHeaderLabels(["Name", "Size", "Type", "Modified"])
         self.tree_widget.setColumnWidth(0, 500); self.tree_widget.setColumnWidth(1, 120); self.tree_widget.setColumnWidth(2, 120)
+        self.tree_widget.setAlternatingRowColors(True)
+        self.tree_widget.setStyleSheet("QTreeWidget { font-size: 14px; } QTreeWidget::item:selected { background: #e0f7fa; }")
         splitter.addWidget(self.tree_widget)
         progress_frame = QFrame(); progress_layout = QVBoxLayout(progress_frame)
         overall_progress_layout = QHBoxLayout(); overall_progress_layout.addWidget(QLabel("Overall Progress:"))
         self.overall_progress = QProgressBar(); self.overall_progress.setTextVisible(True); self.overall_progress.setValue(0)
         self.overall_progress.setFormat("%p%")
+        self.overall_progress.setMinimumHeight(24)
+        self.overall_progress.setStyleSheet("QProgressBar { border-radius: 8px; background: #23272b; color: #f5f5f5; } QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00bcd4, stop:1 #8bc34a); border-radius: 8px; }")
         overall_progress_layout.addWidget(self.overall_progress); progress_layout.addLayout(overall_progress_layout)
         self.per_file_progress_layout = QVBoxLayout(); progress_layout.addLayout(self.per_file_progress_layout)
         progress_layout.addStretch(); splitter.addWidget(progress_frame); splitter.setSizes([500, 300])
         download_controls_layout = QHBoxLayout()
         self.download_path_input = QLineEdit(self.config_manager.get("default_download_path"))
-        self.browse_button = QPushButton("Browse..."); self.download_button = QPushButton("Download")
+        self.download_path_input.setMinimumHeight(32)
+        self.browse_button = QPushButton("Browse..."); self.browse_button.setMinimumHeight(32)
+        self.download_button = QPushButton("Download")
         self.download_button.setIcon(self.style().standardIcon(QStyle.SP_ArrowDown))
+        self.download_button.setMinimumHeight(32)
+        self.download_button.setStyleSheet("QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00bcd4, stop:1 #8bc34a); color: white; border-radius: 8px; font-weight: bold; } QPushButton:hover { background: #26c6da; }")
         download_controls_layout.addWidget(QLabel("Download To:")); download_controls_layout.addWidget(self.download_path_input)
         download_controls_layout.addWidget(self.browse_button); download_controls_layout.addWidget(self.download_button)
         main_layout.addLayout(download_controls_layout)
+
+        # Add a fun animated icon (spinner) for download activity
+        self.spinner_label = QLabel()
+        self.spinner_label.setFixedSize(32, 32)
+        self.spinner_movie = QMovie(":/qt-project.org/styles/commonstyle/images/standardbutton-apply-32.png")
+        self.spinner_label.setMovie(self.spinner_movie)
+        self.spinner_label.setVisible(False)
+        main_layout.addWidget(self.spinner_label, alignment=Qt.AlignRight)
+
+        # Apply a modern, playful dark stylesheet to the whole window
+        self.setStyleSheet('''
+            QMainWindow { background: #181c1f; }
+            QPushButton { border-radius: 8px; padding: 6px 16px; font-size: 14px; background: #23272b; color: #f5f5f5; }
+            QPushButton:pressed { background: #263238; }
+            QPushButton:hover { background: #37474f; }
+            QLineEdit { border: 1px solid #37474f; border-radius: 8px; padding: 4px 8px; font-size: 14px; background: #23272b; color: #f5f5f5; }
+            QLabel { font-size: 14px; color: #f5f5f5; }
+            QToolBar { background: #23272b; border-bottom: 1px solid #263238; }
+            QStatusBar { background: #23272b; border-top: 1px solid #263238; color: #f5f5f5; }
+            QTreeWidget { font-size: 14px; background: #23272b; color: #f5f5f5; alternate-background-color: #21252b; }
+            QTreeWidget::item:selected { background: #263238; color: #ffeb3b; }
+            QProgressBar { border-radius: 8px; background: #23272b; color: #f5f5f5; }
+            QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00bcd4, stop:1 #8bc34a); border-radius: 8px; }
+        ''')
 
     def connect_signals(self):
         self.browse_button.clicked.connect(self.browse_download_path)
@@ -114,12 +149,21 @@ class MainWindow(QMainWindow):
 
     def set_ui_state(self, downloading: bool, message: str = ""):
         self.is_downloading = downloading
-        for action in [self.cancel_action, self.pause_all_action, self.resume_all_action]: action.setEnabled(downloading)
-        for widget in [self.download_button, self.fetch_button, self.url_input, self.browse_button]: widget.setEnabled(not downloading)
+        # Only disable pause/resume/cancel actions during download
+        for action in [self.cancel_action, self.pause_all_action, self.resume_all_action]:
+            action.setEnabled(downloading)
+        # Do NOT disable download_button, url_input, or browse_button during downloads
+        # Only disable fetch/cancel fetch buttons as needed (handled elsewhere)
+        if downloading:
+            self.spinner_label.setVisible(True)
+            self.spinner_movie.start()
+        else:
+            self.spinner_label.setVisible(False)
+            self.spinner_movie.stop()
         if message: self.statusBar.showMessage(message)
 
     def start_download(self):
-        if self.is_downloading: return
+        # Allow queuing new downloads even if already downloading
         selected_files = self.get_checked_items()
         if not selected_files: QMessageBox.warning(self, "No Files", "Please select files to download."); return
         download_path = self.download_path_input.text()
@@ -162,11 +206,16 @@ class MainWindow(QMainWindow):
     def on_file_download_started(self, worker_id, filename):
         hbox = QHBoxLayout(); status_label = QLabel(f"{filename}: Queued...")
         progress_bar = QProgressBar()
+        progress_bar.setMinimumHeight(18)
+        progress_bar.setStyleSheet("QProgressBar { border-radius: 6px; background: #23272b; color: #f5f5f5; } QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff9800, stop:1 #ffeb3b); border-radius: 6px; }")
         buttons = {
             'pause': QPushButton(self.style().standardIcon(QStyle.SP_MediaPause), ""),
             'resume': QPushButton(self.style().standardIcon(QStyle.SP_MediaPlay), ""),
             'cancel': QPushButton(self.style().standardIcon(QStyle.SP_MediaStop), "")
         }
+        for btn in buttons.values():
+            btn.setMinimumHeight(18)
+            btn.setStyleSheet("QPushButton { border-radius: 6px; background: #263238; color: #f5f5f5; } QPushButton:hover { background: #37474f; }")
         buttons['pause'].clicked.connect(partial(self.download_manager.pause_file, worker_id))
         buttons['resume'].clicked.connect(partial(self.download_manager.resume_file, worker_id))
         buttons['cancel'].clicked.connect(partial(self.download_manager.cancel_file, worker_id))
