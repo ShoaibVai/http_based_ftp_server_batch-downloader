@@ -1,83 +1,82 @@
-1# FTP Batch Downloader
+# FTP Batch Downloader
 
-FTP Batch Downloader is a cross-platform desktop application built with Python and PyQt5 that allows you to browse and batch download files from both HTTP and FTP servers. It features a modern GUI, robust error handling, and flexible configuration.
+A modern, colorful, and highly-configurable batch downloader for HTTP/FTP servers with a beautiful PyQt5 GUI.
+
+---
 
 ## Features
 
-* **Modern GUI:** Clean, responsive interface built with PyQt5.
-* **Batch Downloading:** Download multiple files and entire folders concurrently.
-* **HTTP and FTP Support:** Browse and download from both HTTP and FTP directories.
-* **Concurrent Operations:** User-configurable number of parallel downloads and directory listings.
-* **Download Control:** Pause, resume, and cancel downloads (globally and individually).
-* **Accurate Progress Tracking:** View overall and per-file progress, including total bytes.
-* **Directory Tree View:** Recursively lists files and folders from the server.
-* **User-Friendly:** Drag-and-drop for URLs, clear notifications, and a centralized error log.
-* **Configurable:** Performance and behavior parameters are set via a JSON config file.
-* **Robust:** Handles network errors gracefully and logs all issues to a file.
+- **Modern, Colorful UI**: Multiple themes (Colorful, Dark, Light, Solarized, Classic) with real-time switching.
+- **Tabbed Interface**: Downloader, Downloads, and Settings tabs for clear workflow.
+- **Batch Downloading**: Download multiple files and entire folders concurrently.
+- **HTTP & FTP Support**: Recursively list and download from both HTTP and FTP servers.
+- **Smart Directory Tree**: Hierarchical tree view for browsing and selecting files/folders.
+- **Download Manager**: Pause, resume, cancel, retry (per-file and global), with real-time progress and ETA.
+- **Disk Space Check**: Warns if there’s not enough space before starting a download.
+- **Percent-Decoding**: Local folders/files use spaces instead of %20, matching server names.
+- **Log Viewer**: View logs in-app with themed window.
+- **Settings Tab**: Change concurrency, listing depth, and theme on the fly.
+- **Robust Error Handling**: Retries, error reporting, and persistent download state.
+- **No venv Required**: Just install dependencies and run.
+
+---
 
 ## Project Structure
 
-- `main.py`: Entry point. Initializes the application and main window.
-- `ui/main_window.py`: Implements the main PyQt5 window, including the UI, event handling, and user interactions.
-- `core/downloader.py`: Contains the download manager and worker threads for HTTP/FTP downloads, with support for pause/resume/cancel and progress reporting.
-- `core/lister.py`: Implements directory listing for HTTP/FTP servers, supporting recursive listing and emitting results to the UI.
-- `core/utils.py`: Utility threads, including file size calculation for download progress.
-- `config/manager.py`: Loads, saves, and manages application settings from `config.json`.
-- `utils/logger.py`: Sets up centralized logging to both file and console.
-- `config.json`: Stores user and app configuration (download path, concurrency, timeouts, etc).
-- `logs/app.log`: Application log file (auto-created).
+- `main.py` — Entry point, launches the PyQt5 app.
+- `ui/main_window.py` — Main window, tab logic, and all UI/UX.
+- `ui/downloads_tab.py` — Downloads tab: progress, ETA, actions, sub-tabs.
+- `ui/settings_tab.py` — Settings tab: concurrency, depth, theme, log viewer.
+- `core/downloader.py` — Download manager and worker threads (pause/resume/cancel/retry, percent-decode, disk check).
+- `core/lister.py` — Directory lister for HTTP/FTP, recursive.
+- `core/utils.py` — Size calculator and helpers.
+- `config/manager.py` — Loads/saves settings from `config.json`.
+- `logs/app.log` — Application log file.
+- `requirements.txt` — Python dependencies.
 
-## Configuration
+---
 
-The application uses `config.json` for settings such as:
-- `default_download_path`: Default folder for downloads
-- `max_concurrent_downloads`: Number of parallel downloads
-- `max_concurrent_listings`: Number of parallel directory listings
-- `listing_depth`: Recursion depth for directory listings
-- `chunk_size`: Download chunk size (bytes)
-- `request_timeout`: Timeout for network requests (seconds)
-- `retry_attempts`: Number of retry attempts for failed downloads
-- `retry_delay`: Delay between retries (seconds)
+## Installation
 
-You can edit `config.json` manually or change some settings via the UI (e.g., download path, concurrency).
+1. **Clone or download this repository.**
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Run the application:**
+   ```bash
+   python main.py
+   ```
 
-## Logging
-
-All errors and important events are logged to `logs/app.log`. You can view the log from the application ("View Log" action) or open the file directly.
-
-## Setup and Installation
-
-1. **Create the directory structure** and save each file from this repository into its correct location.
-2. **Create a virtual environment (recommended):**
-    ```bash
-    python -m venv venv
-    # On Windows:
-    venv\Scripts\activate
-    # On macOS/Linux:
-    source venv/bin/activate
-    ```
-3. **Install the required dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-4. **Run the application:**
-    ```bash
-    python main.py
-    ```
+---
 
 ## Usage
 
-- Enter or drag-and-drop an HTTP/FTP URL into the input field.
-- Click "Fetch" to list files and folders.
-- Select files/folders to download (checkboxes).
-- Choose the download directory (default is set in config or via the UI).
-- Click "Download" to start batch downloading.
-- Use the toolbar to pause, resume, or cancel downloads. View logs for errors.
+- **Downloader Tab**: Enter or drag-and-drop an HTTP/FTP URL, click Fetch, select files/folders, choose download directory, and click Download.
+- **Downloads Tab**: Monitor all downloads (Active, Completed, Failed, Canceled), see real-time progress and ETA, pause/resume/cancel/retry, open completed files in Explorer.
+- **Settings Tab**: Change concurrent downloads, listing depth, and theme. View logs.
+- **Themes**: Instantly switch between Colorful, Dark, Light, Solarized, and Classic.
+- **Disk Space**: Get warned if you don’t have enough space for a file before download starts.
+- **Percent-Decoding**: Local folders/files use spaces (not %20) for readability.
+
+---
+
+## Configuration
+
+- All settings are stored in `config.json` and can be changed in the Settings tab.
+- Key options:
+  - `default_download_path`: Default folder for downloads
+  - `max_concurrent_downloads`: Number of parallel downloads
+  - `listing_depth`: Recursion depth for directory listings
+  - `theme_name`: UI theme
+
+---
 
 ## Requirements
 
 - Python 3.7+
 - PyQt5
+- PyQtWebEngine (if you use browser features)
 - requests
 - beautifulsoup4
 
@@ -85,4 +84,14 @@ See `requirements.txt` for exact versions.
 
 ---
 
-For questions or issues, please check the log file or open an issue.
+## Notes
+
+- No virtual environment (venv) is required. Just install dependencies globally or in your preferred environment.
+- All folders/files created locally will use spaces instead of percent-encoded names.
+- The app is robust for extremely large files and large batches.
+
+---
+
+## License
+
+MIT License (see LICENSE file) 
