@@ -288,18 +288,15 @@ class MainWindow(QMainWindow):
     def on_size_calc_finished(self): self.statusBar.showMessage("Starting downloads...")
 
     def on_overall_progress(self, downloaded_bytes, total_bytes):
-        if total_bytes > 0:
-            self.overall_progress.setMaximum(total_bytes)
-            self.overall_progress.setValue(downloaded_bytes)
-            self.overall_progress.setFormat(f"%p% ({format_bytes(downloaded_bytes)} / {format_bytes(total_bytes)})")
         self.statusBar.showMessage(f"Downloading... {format_bytes(downloaded_bytes)} / {format_bytes(total_bytes)}")
 
     def on_all_downloads_finished(self):
         if self.is_downloading:
             self.statusBar.showMessage("All downloads finished.", 5000)
-            if self.overall_progress.value() >= self.overall_progress.maximum():
-                 self.show_message("Complete", "All downloads completed successfully.", QMessageBox.Information)
-        self.set_ui_state(False, "Ready"); self.overall_progress.setValue(0); self.overall_progress.setFormat("%p%")
+            # Removed: if self.overall_progress.value() >= self.overall_progress.maximum():
+            # Removed: self.show_message("Complete", "All downloads completed successfully.", QMessageBox.Information)
+        self.set_ui_state(False, "Ready")
+        # Removed: self.overall_progress.setValue(0); self.overall_progress.setFormat("%p%")
 
     def on_file_download_started(self, worker_id, filename):
         # No per-file progress UI in main window anymore
