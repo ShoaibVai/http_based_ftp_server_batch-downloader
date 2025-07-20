@@ -4,6 +4,8 @@
 import sys
 import os
 from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QProgressBar
+from PyQt5.QtCore import Qt
 
 # Before importing our modules, ensure the necessary directories exist.
 # This helps prevent import errors if the script is run from a clean state.
