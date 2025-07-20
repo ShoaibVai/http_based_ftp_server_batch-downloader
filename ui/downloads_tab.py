@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QLabel, QTabWidget, QMessageBox)
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 import os
 import subprocess
 import shutil
@@ -38,6 +38,11 @@ class DownloadsTab(QWidget):
         super().__init__(parent)
         self.last_progress_times = {}  # For ETA calculation
         self.last_progress_bytes = {}
+        self._last_eta = {}  # For persistent ETA display
+        self._active_data = ([], [], [], [])
+        self._timer = QTimer(self)
+        self._timer.setInterval(200)
+        self._timer.timeout.connect(self._refresh_ui)
         self.init_ui()
 
     def init_ui(self):
@@ -108,6 +113,16 @@ class DownloadsTab(QWidget):
             return True, None  # If check fails, allow download
 
     def update_downloads(self, active, completed, failed, canceled):
+        self._active_data = (active, completed, failed, canceled)
+        if active and not self._timer.isActive():
+            self._timer.start()
+        elif not active and self._timer.isActive():
+            self._timer.stop()
+        if not self._timer.isActive():
+            self._refresh_ui()
+
+    def _refresh_ui(self):
+        active, completed, failed, canceled = self._active_data
         # Active
         self.active_table.setRowCount(len(active))
         now = time.time()
@@ -120,7 +135,7 @@ class DownloadsTab(QWidget):
             self.active_table.setCellWidget(row, 2, progress_widget)
             self.active_table.setItem(row, 3, QTableWidgetItem(d['size']))
             # ETA calculation
-            eta_str = "-"
+            eta_str = self._last_eta.get(d['file_path'], "-")
             if d['status'] == 'Downloading' and d['progress'] > 0 and d['progress'] < 100:
                 key = d['file_path']
                 total_bytes = parse_size(d['size'])
@@ -135,6 +150,7 @@ class DownloadsTab(QWidget):
                         eta = int(bytes_left / speed)
                         mins, secs = divmod(eta, 60)
                         eta_str = f"{mins}m {secs}s" if mins else f"{secs}s"
+                        self._last_eta[key] = eta_str
                 self.last_progress_times[key] = now
                 self.last_progress_bytes[key] = bytes_now
             self.active_table.setItem(row, 4, QTableWidgetItem(eta_str))

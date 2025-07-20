@@ -173,6 +173,7 @@ class DownloadManager(QObject):
             worker.finished.connect(self._on_worker_finished)
             worker.error.connect(self._on_worker_error)
             worker.progress.connect(self.file_progress)
+            worker.progress.connect(self._on_file_progress_update)
             worker.status_changed.connect(self.file_status_changed)
             self.active_workers[url] = worker
             self._update_download_status(url, 'Downloading')
@@ -214,6 +215,10 @@ class DownloadManager(QObject):
                 d['progress'] = int((downloaded / total) * 100) if total else 0
                 break
         self.downloads_updated.emit()
+
+    def _on_file_progress_update(self, worker_id, downloaded, total):
+        self.update_progress(worker_id, downloaded, total)
+        # self.downloads_updated.emit()  # Removed to prevent UI freeze
 
     def pause_file(self, worker_id):
         if worker_id in self.active_workers: self.active_workers[worker_id].pause(); self._update_download_status(worker_id, 'Paused'); self.downloads_updated.emit()
