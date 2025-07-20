@@ -145,6 +145,12 @@ class MainWindow(QMainWindow):
         self.concurrency_spinbox.setRange(1, 16); self.concurrency_spinbox.setValue(self.config_manager.get("max_concurrent_downloads"))
         self.concurrency_spinbox.valueChanged.connect(lambda val: self.config_manager.set("max_concurrent_downloads", val))
         toolbar.addWidget(self.concurrency_spinbox)
+        
+        toolbar.addSeparator()
+        toolbar.addWidget(QLabel("Depth:")); self.depth_spinbox = QSpinBox()
+        self.depth_spinbox.setRange(1, 10); self.depth_spinbox.setValue(self.config_manager.get("listing_depth"))
+        self.depth_spinbox.valueChanged.connect(lambda val: self.config_manager.set("listing_depth", val))
+        toolbar.addWidget(self.depth_spinbox)
 
     def create_status_bar(self):
         self.statusBar = QStatusBar(); self.setStatusBar(self.statusBar); self.statusBar.showMessage("Ready")
@@ -269,7 +275,10 @@ class MainWindow(QMainWindow):
         parent_item = self.path_to_item_map.get(parent_path, self.tree_widget.invisibleRootItem())
         tree_item = QTreeWidgetItem(parent_item, [item_data['name'], str(item_data['size']), item_data['type'], item_data['modified']])
         tree_item.setFlags(tree_item.flags() | Qt.ItemIsUserCheckable); tree_item.setCheckState(0, Qt.Unchecked)
-        tree_item.setData(0, Qt.UserRole, item_data['path'])
+        
+        # Store the full URL for downloads (HTTP) or path (FTP)
+        download_url = item_data.get('full_url', item_data['path'])
+        tree_item.setData(0, Qt.UserRole, download_url)
         if item_data['type'] == 'Directory':
             self.path_to_item_map[norm_path(item_data['path'])] = tree_item
     

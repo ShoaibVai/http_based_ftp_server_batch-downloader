@@ -69,22 +69,46 @@ class DirectoryLister(QThread):
     def _list_http(self, url, current_depth=0):
         if self._cancelled: return
         if current_depth >= self.config.get('listing_depth', 3): return
+        
+        logger.info(f"Listing HTTP directory at depth {current_depth}: {url}")
+        
         try:
             response = requests.get(url, timeout=self.config.get('request_timeout', 30))
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
+            
             for link in soup.find_all('a'):
                 if self._cancelled: return
                 href = link.get('href')
-                if not href or href.startswith('?') or href.startswith('#') or link.get_text(strip=True).lower() == 'parent directory': continue
+                if not href or href.startswith('?') or href.startswith('#') or link.get_text(strip=True).lower() == 'parent directory': 
+                    continue
+                    
                 full_url = urljoin(url, href)
                 is_dir = href.endswith('/')
+                link_text = link.get_text(strip=True)
+                
+                # Extract the relative path from the base URL for proper tree building
+                if full_url.startswith(self.base_url):
+                    relative_path = full_url[len(self.base_url):].rstrip('/')
+                    if not relative_path:  # Root directory
+                        relative_path = '/'
+                else:
+                    relative_path = href.rstrip('/')
+                    if not relative_path:
+                        relative_path = '/'
+                
+                logger.info(f"Found item: {link_text} ({'Directory' if is_dir else 'File'}) at path: {relative_path}")
+                
                 self.item_found.emit({
-                    'name': link.get_text(strip=True), 'size': '-', 'type': "Directory" if is_dir else "File",
-                    'modified': '-', 'path': full_url
+                    'name': link_text, 'size': '-', 'type': "Directory" if is_dir else "File",
+                    'modified': '-', 'path': relative_path, 'full_url': full_url
                 })
+                
+                # Recursively list subdirectories
                 if is_dir and full_url.startswith(self.base_url):
+                    logger.info(f"Recursively listing subdirectory: {full_url}")
                     self._list_http(full_url, current_depth + 1)
+                    
         except requests.RequestException as e:
             logger.error(f"HTTP error for {url}: {e}")
             self.error.emit(f"HTTP error: {e}")
