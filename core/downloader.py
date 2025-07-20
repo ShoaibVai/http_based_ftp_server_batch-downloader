@@ -4,7 +4,7 @@
 import os
 import logging
 import time
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 import requests
 from ftplib import FTP, error_perm
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, QMutex, QWaitCondition, QMutexLocker
@@ -47,7 +47,8 @@ class DownloadWorker(QThread):
         if self._is_running: self.finished.emit(self.worker_id, self.bytes_downloaded_this_session)
 
     def _download_http(self):
-        local_filename = os.path.join(self.base_folder, self.rel_path)
+        # Decode percent-encoded rel_path for local file creation
+        local_filename = os.path.join(self.base_folder, unquote(self.rel_path))
         headers, resumed_bytes = {}, 0
         if os.path.exists(local_filename):
             resumed_bytes = os.path.getsize(local_filename)
@@ -70,7 +71,8 @@ class DownloadWorker(QThread):
                         self.progress.emit(self.worker_id, downloaded_bytes, total_size)
 
     def _download_ftp(self):
-        local_filename = os.path.join(self.base_folder, self.rel_path)
+        # Decode percent-encoded rel_path for local file creation
+        local_filename = os.path.join(self.base_folder, unquote(self.rel_path))
         os.makedirs(os.path.dirname(local_filename), exist_ok=True)
         with FTP(self.parsed_url.netloc, timeout=self.config.get('request_timeout')) as ftp:
             ftp.login()

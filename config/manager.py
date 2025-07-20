@@ -23,14 +23,15 @@ class ConfigManager:
     def get_default_settings(self):
         """Returns a dictionary with default settings."""
         return {
-            "default_download_path": os.path.join(os.path.expanduser("~"), "Downloads"),
+            "default_download_path": "A:/Downloads/TEST",
             "max_concurrent_downloads": 4,
             "max_concurrent_listings": 4,
             "listing_depth": 3,
             "chunk_size": 8192,
             "request_timeout": 30,
             "retry_attempts": 3,
-            "retry_delay": 5
+            "retry_delay": 5,
+            "theme_name": "Colorful"
         }
 
     def load_settings(self):

@@ -21,6 +21,7 @@ from ui.downloads_tab import DownloadsTab
 from ui.settings_tab import SettingsTab
 import sys
 import subprocess
+from urllib.parse import unquote
 
 logger = setup_logger()
 
@@ -73,14 +74,18 @@ class MainWindow(QMainWindow):
         self.downloads_tab = DownloadsTab()
         self.tab_widget.addTab(self.downloads_tab, "Downloads")
         # Settings tab
+        theme_name = self.config_manager.get("theme_name", "Colorful")
         self.settings_tab = SettingsTab(
             concurrent=self.config_manager.get("max_concurrent_downloads"),
-            depth=self.config_manager.get("listing_depth")
+            depth=self.config_manager.get("listing_depth"),
+            theme_name=theme_name
         )
         self.settings_tab.concurrent_changed.connect(lambda val: self.config_manager.set("max_concurrent_downloads", val))
         self.settings_tab.depth_changed.connect(lambda val: self.config_manager.set("listing_depth", val))
         self.settings_tab.view_log.connect(self.show_error_log)
+        self.settings_tab.theme_changed.connect(self.apply_theme)
         self.tab_widget.addTab(self.settings_tab, "Settings")
+        self.apply_theme(theme_name)
 
     def init_downloader_tab(self, tab_widget):
         main_layout = QVBoxLayout(tab_widget)
@@ -275,7 +280,7 @@ class MainWindow(QMainWindow):
         if not os.path.isdir(download_path): self.show_message("Invalid Path", "Download directory does not exist.", QMessageBox.Critical); return
         # Create a folder named after the selected directory (unless already exists)
         root_url = self.url_input.text().strip()
-        root_dir_name = os.path.basename(root_url.rstrip('/'))
+        root_dir_name = unquote(os.path.basename(root_url.rstrip('/')))
         base_folder = os.path.join(download_path, root_dir_name)
         os.makedirs(base_folder, exist_ok=True)
         self.set_ui_state(True, "Calculating total download size...")
@@ -405,14 +410,11 @@ class MainWindow(QMainWindow):
             with open('logs/app.log', 'r') as f: log_content = f.read()
         except Exception as e: log_content = f"Could not read log file: {e}"
         log_view.setText(log_content); layout.addWidget(log_view)
-        # Apply dark palette to dialog and text edit
-        dark_palette = QPalette()
-        dark_palette.setColor(QPalette.Window, QColor('#23272b'))
-        dark_palette.setColor(QPalette.Base, QColor('#23272b'))
-        dark_palette.setColor(QPalette.Text, QColor('#8B0000'))
-        dark_palette.setColor(QPalette.WindowText, QColor('#8B0000'))
-        log_dialog.setPalette(dark_palette)
-        log_view.setPalette(dark_palette)
+        # Apply colorful palette to dialog and text edit
+        log_dialog.setStyleSheet('''
+            QDialog { background: #232946; border: 2px solid #2196F3; }
+            QTextEdit { background: #393E6B; color: #fff; font-size: 14px; border: 1.5px solid #2196F3; border-radius: 8px; }
+        ''')
         log_dialog.exec_()
 
     def show_message(self, title, message, icon=QMessageBox.Information):
@@ -533,3 +535,90 @@ class MainWindow(QMainWindow):
                 subprocess.run(['open', '--', os.path.dirname(file_path)])
             else:
                 subprocess.run(['xdg-open', os.path.dirname(file_path)])
+
+    def apply_theme(self, theme_name):
+        self.config_manager.set("theme_name", theme_name)
+        styles = {
+            "Colorful": '''
+                QMainWindow { background: #232946; }
+                QPushButton { border-radius: 8px; padding: 6px 16px; font-size: 14px; background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2196F3, stop:1 #FF9800); color: #fff; font-weight: bold; }
+                QPushButton:pressed { background: #FF9800; color: #fff; }
+                QPushButton:hover { background: #4CAF50; color: #fff; }
+                QLineEdit { border: 1.5px solid #2196F3; border-radius: 8px; padding: 4px 8px; font-size: 14px; background: #393E6B; color: #fff; selection-background-color: #FF9800; selection-color: #232946; }
+                QLabel { font-size: 14px; color: #E0E0E0; }
+                QToolBar { background: #232946; border-bottom: 2px solid #2196F3; }
+                QStatusBar { background: #232946; border-top: 2px solid #2196F3; color: #fff; }
+                QTreeWidget { font-size: 14px; background: #393E6B; color: #fff; alternate-background-color: #232946; }
+                QTreeWidget::item:selected { background: #2196F3; color: #fff; }
+                QTreeWidget::item:hover { background: #FF9800; color: #fff; }
+                QHeaderView::section { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2196F3, stop:1 #FF9800); color: #fff; border: none; font-weight: bold; }
+                QProgressBar { border-radius: 8px; background: #232946; color: #fff; text-align: center; }
+                QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4CAF50, stop:1 #2196F3); border-radius: 8px; }
+                QTabWidget::pane { border: 2px solid #2196F3; background: #232946; }
+                QTabBar::tab { background: #393E6B; color: #fff; padding: 6px 16px; min-width: 80px; min-height: 28px; font-size: 13px; border-top-left-radius: 6px; border-top-right-radius: 6px; font-weight: bold; margin-right: 4px; }
+                QTabWidget::tab-bar { alignment: center; }
+                QTabBar::tab:selected { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2196F3, stop:1 #FF9800); color: #fff; }
+                QTabBar::tab:hover { background: #FF9800; color: #fff; }
+            ''',
+            "Dark": '''
+                QMainWindow { background: #181818; }
+                QPushButton { border-radius: 8px; padding: 6px 16px; font-size: 14px; background: #232323; color: #fff; font-weight: bold; }
+                QPushButton:pressed { background: #333; color: #fff; }
+                QPushButton:hover { background: #444; color: #fff; }
+                QLineEdit { border: 1.5px solid #444; border-radius: 8px; padding: 4px 8px; font-size: 14px; background: #232323; color: #fff; selection-background-color: #2196F3; selection-color: #181818; }
+                QLabel { font-size: 14px; color: #fff; }
+                QToolBar, QStatusBar { background: #181818; color: #fff; }
+                QTreeWidget, QTabBar::tab, QTabWidget::pane { background: #232323; color: #fff; }
+                QTreeWidget::item:selected, QTabBar::tab:selected { background: #2196F3; color: #fff; }
+                QTreeWidget::item:hover, QTabBar::tab:hover { background: #FF9800; color: #fff; }
+                QHeaderView::section { background: #232323; color: #fff; border: none; font-weight: bold; }
+                QProgressBar { border-radius: 8px; background: #181818; color: #fff; text-align: center; }
+                QProgressBar::chunk { background: #2196F3; border-radius: 8px; }
+            ''',
+            "Light": '''
+                QMainWindow { background: #f5f5f5; }
+                QPushButton { border-radius: 8px; padding: 6px 16px; font-size: 14px; background: #2196F3; color: #fff; font-weight: bold; }
+                QPushButton:pressed { background: #1976D2; color: #fff; }
+                QPushButton:hover { background: #FF9800; color: #fff; }
+                QLineEdit { border: 1.5px solid #2196F3; border-radius: 8px; padding: 4px 8px; font-size: 14px; background: #fff; color: #232946; selection-background-color: #2196F3; selection-color: #fff; }
+                QLabel { font-size: 14px; color: #232946; }
+                QToolBar, QStatusBar { background: #e0e0e0; color: #232946; }
+                QTreeWidget, QTabBar::tab, QTabWidget::pane { background: #fff; color: #232946; }
+                QTreeWidget::item:selected, QTabBar::tab:selected { background: #2196F3; color: #fff; }
+                QTreeWidget::item:hover, QTabBar::tab:hover { background: #FF9800; color: #fff; }
+                QHeaderView::section { background: #2196F3; color: #fff; border: none; font-weight: bold; }
+                QProgressBar { border-radius: 8px; background: #e0e0e0; color: #232946; text-align: center; }
+                QProgressBar::chunk { background: #2196F3; border-radius: 8px; }
+            ''',
+            "Solarized": '''
+                QMainWindow { background: #002b36; }
+                QPushButton { border-radius: 8px; padding: 6px 16px; font-size: 14px; background: #268bd2; color: #fdf6e3; font-weight: bold; }
+                QPushButton:pressed { background: #b58900; color: #fdf6e3; }
+                QPushButton:hover { background: #2aa198; color: #fdf6e3; }
+                QLineEdit { border: 1.5px solid #268bd2; border-radius: 8px; padding: 4px 8px; font-size: 14px; background: #073642; color: #fdf6e3; selection-background-color: #b58900; selection-color: #002b36; }
+                QLabel { font-size: 14px; color: #fdf6e3; }
+                QToolBar, QStatusBar { background: #073642; color: #fdf6e3; }
+                QTreeWidget, QTabBar::tab, QTabWidget::pane { background: #073642; color: #fdf6e3; }
+                QTreeWidget::item:selected, QTabBar::tab:selected { background: #268bd2; color: #fdf6e3; }
+                QTreeWidget::item:hover, QTabBar::tab:hover { background: #b58900; color: #fdf6e3; }
+                QHeaderView::section { background: #268bd2; color: #fdf6e3; border: none; font-weight: bold; }
+                QProgressBar { border-radius: 8px; background: #002b36; color: #fdf6e3; text-align: center; }
+                QProgressBar::chunk { background: #2aa198; border-radius: 8px; }
+            ''',
+            "Classic": '''
+                QMainWindow { background: #ececec; }
+                QPushButton { border-radius: 8px; padding: 6px 16px; font-size: 14px; background: #d3d3d3; color: #232946; font-weight: bold; }
+                QPushButton:pressed { background: #b0b0b0; color: #232946; }
+                QPushButton:hover { background: #2196F3; color: #fff; }
+                QLineEdit { border: 1.5px solid #2196F3; border-radius: 8px; padding: 4px 8px; font-size: 14px; background: #fff; color: #232946; selection-background-color: #2196F3; selection-color: #fff; }
+                QLabel { font-size: 14px; color: #232946; }
+                QToolBar, QStatusBar { background: #ececec; color: #232946; }
+                QTreeWidget, QTabBar::tab, QTabWidget::pane { background: #fff; color: #232946; }
+                QTreeWidget::item:selected, QTabBar::tab:selected { background: #2196F3; color: #fff; }
+                QTreeWidget::item:hover, QTabBar::tab:hover { background: #FF9800; color: #fff; }
+                QHeaderView::section { background: #d3d3d3; color: #232946; border: none; font-weight: bold; }
+                QProgressBar { border-radius: 8px; background: #ececec; color: #232946; text-align: center; }
+                QProgressBar::chunk { background: #2196F3; border-radius: 8px; }
+            '''
+        }
+        self.setStyleSheet(styles.get(theme_name, styles["Colorful"]))
