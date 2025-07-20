@@ -1,8 +1,8 @@
 {
-    "default_download_path": "",
-    "max_concurrent_downloads": 4,
+    "default_download_path": "A:/Downloads/TEST",
+    "max_concurrent_downloads": 2,
     "max_concurrent_listings": 4,
-    "listing_depth": 5,
+    "listing_depth": 10,
     "chunk_size": 8192,
     "request_timeout": 30,
     "retry_attempts": 3,

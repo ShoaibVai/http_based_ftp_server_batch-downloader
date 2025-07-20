@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, 
     QTreeWidget, QTreeWidgetItem, QProgressBar, QLabel, QFileDialog, QMessageBox, 
     QSplitter, QFrame, QAction, QToolBar, QStatusBar, QSpinBox, QDialog, 
-    QTextEdit, QApplication, QStyle, QTreeWidgetItemIterator, QSizePolicy
+    QTextEdit, QApplication, QStyle, QTreeWidgetItemIterator, QSizePolicy, QTabWidget
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QIcon, QMovie, QPalette, QColor
@@ -17,6 +17,9 @@ from core.lister import DirectoryLister
 from core.downloader import DownloadManager
 from config.manager import ConfigManager
 from utils.logger import setup_logger
+from ui.downloads_tab import DownloadsTab
+import sys
+import subprocess
 
 logger = setup_logger()
 
@@ -39,16 +42,39 @@ class MainWindow(QMainWindow):
         self.config_manager = ConfigManager()
         self.download_manager = DownloadManager(self.config_manager)
         self.init_ui()
-        self.create_actions()
         self.create_toolbars()
         self.create_status_bar()
         self.lister_thread, self.path_to_item_map, self.file_progress_widgets = None, {}, {}
         self.is_downloading = False
         self.connect_signals()
+        # Connect download manager to downloads tab
+        self.download_manager.downloads_updated.connect(self.update_downloads_tab)
+        self.downloads_tab.pause_all.connect(self.download_manager.pause_all)
+        self.downloads_tab.resume_all.connect(self.download_manager.resume_all)
+        self.downloads_tab.cancel_all.connect(self.download_manager.cancel_all)
+        self.downloads_tab.pause_download.connect(lambda row: self._downloads_tab_action(row, 'pause'))
+        self.downloads_tab.resume_download.connect(lambda row: self._downloads_tab_action(row, 'resume'))
+        self.downloads_tab.cancel_download.connect(lambda row: self._downloads_tab_action(row, 'cancel'))
+        self.downloads_tab.retry_download.connect(self._downloads_tab_retry)
+        self.downloads_tab.open_in_explorer.connect(self.open_in_explorer)
 
     def init_ui(self):
         central_widget = QWidget(); self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget); url_layout = QHBoxLayout()
+        main_layout = QVBoxLayout(central_widget)
+        # Tab widget
+        self.tab_widget = QTabWidget()
+        main_layout.addWidget(self.tab_widget)
+        # Main downloader tab
+        self.downloader_tab = QWidget()
+        self.init_downloader_tab(self.downloader_tab)
+        self.tab_widget.addTab(self.downloader_tab, "Downloader")
+        # Downloads tab
+        self.downloads_tab = DownloadsTab()
+        self.tab_widget.addTab(self.downloads_tab, "Downloads")
+
+    def init_downloader_tab(self, tab_widget):
+        main_layout = QVBoxLayout(tab_widget)
+        url_layout = QHBoxLayout()
         self.url_input = QLineEdit(); self.url_input.setPlaceholderText("Drag & Drop or Paste FTP/HTTP URL...")
         self.url_input.setClearButtonEnabled(True)
         self.url_input.setMinimumHeight(32)
@@ -83,16 +109,12 @@ class MainWindow(QMainWindow):
         download_controls_layout.addWidget(QLabel("Download To:")); download_controls_layout.addWidget(self.download_path_input)
         download_controls_layout.addWidget(self.browse_button); download_controls_layout.addWidget(self.download_button)
         main_layout.addLayout(download_controls_layout)
-
-        # Add a fun animated icon (spinner) for download activity
         self.spinner_label = QLabel()
         self.spinner_label.setFixedSize(32, 32)
         self.spinner_movie = QMovie(":/qt-project.org/styles/commonstyle/images/standardbutton-apply-32.png")
         self.spinner_label.setMovie(self.spinner_movie)
         self.spinner_label.setVisible(False)
         main_layout.addWidget(self.spinner_label, alignment=Qt.AlignRight)
-
-        # Improved dark theme for better contrast and accessibility
         self.setStyleSheet('''
             QMainWindow { background: #181c1f; }
             QPushButton { border-radius: 8px; padding: 6px 16px; font-size: 14px; background: #23272b; color: #8B0000; }
@@ -138,14 +160,15 @@ class MainWindow(QMainWindow):
 
     def create_toolbars(self):
         toolbar = QToolBar("Main Toolbar"); self.addToolBar(toolbar)
-        toolbar.addAction(self.pause_all_action); toolbar.addAction(self.resume_all_action); toolbar.addAction(self.cancel_action)
+        # Create view_log_action here
+        self.view_log_action = QAction(self.style().standardIcon(QStyle.SP_FileIcon), "View Log", self)
+        self.view_log_action.triggered.connect(self.show_error_log)
         toolbar.addSeparator(); toolbar.addAction(self.view_log_action)
         spacer = QWidget(); spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred); toolbar.addWidget(spacer)
         toolbar.addWidget(QLabel("Concurrent:")); self.concurrency_spinbox = QSpinBox()
         self.concurrency_spinbox.setRange(1, 16); self.concurrency_spinbox.setValue(self.config_manager.get("max_concurrent_downloads"))
         self.concurrency_spinbox.valueChanged.connect(lambda val: self.config_manager.set("max_concurrent_downloads", val))
         toolbar.addWidget(self.concurrency_spinbox)
-        
         toolbar.addSeparator()
         toolbar.addWidget(QLabel("Depth:")); self.depth_spinbox = QSpinBox()
         self.depth_spinbox.setRange(1, 10); self.depth_spinbox.setValue(self.config_manager.get("listing_depth"))
@@ -158,8 +181,7 @@ class MainWindow(QMainWindow):
     def set_ui_state(self, downloading: bool, message: str = ""):
         self.is_downloading = downloading
         # Only disable pause/resume/cancel actions during download
-        for action in [self.cancel_action, self.pause_all_action, self.resume_all_action]:
-            action.setEnabled(downloading)
+        # (No longer needed: for action in [self.cancel_action, self.pause_all_action, self.resume_all_action]: action.setEnabled(downloading))
         # Do NOT disable download_button, url_input, or browse_button during downloads
         # Only disable fetch/cancel fetch buttons as needed (handled elsewhere)
         if downloading:
@@ -399,3 +421,53 @@ class MainWindow(QMainWindow):
         self.cancel_fetch_button.setEnabled(False)
         self.fetch_button.setEnabled(True)
         self.statusBar.showMessage("Fetch cancelled.")
+
+    def update_downloads_tab(self):
+        active, completed, failed, canceled = self.download_manager.get_downloads_by_status()
+        # Format for UI
+        def fmt(d):
+            return {
+                'file_name': os.path.basename(d['file_path']),
+                'status': d['status'],
+                'progress': d.get('progress', 0),
+                'size': format_bytes(d.get('size', 0)),
+                'file_path': d['file_path'],
+                'can_pause': d['status'] == 'Downloading',
+                'can_resume': d['status'] == 'Paused',
+                'can_cancel': d['status'] in ('Queued','Downloading','Paused'),
+            }
+        self.downloads_tab.update_downloads(
+            [fmt(d) for d in active],
+            [fmt(d) for d in completed],
+            [fmt(d) for d in failed],
+            [fmt(d) for d in canceled],
+        )
+
+    def _downloads_tab_action(self, row, action):
+        # Find the download by row in the current active list
+        active, _, _, _ = self.download_manager.get_downloads_by_status()
+        if 0 <= row < len(active):
+            url = active[row]['url']
+            if action == 'pause':
+                self.download_manager.pause_file(url)
+            elif action == 'resume':
+                self.download_manager.resume_file(url)
+            elif action == 'cancel':
+                self.download_manager.cancel_file(url)
+
+    def _downloads_tab_retry(self, row, tab):
+        # Find the download by row in the failed/canceled list
+        _, _, failed, canceled = self.download_manager.get_downloads_by_status()
+        if tab == 'failed' and 0 <= row < len(failed):
+            self.download_manager.retry_download(failed[row]['url'])
+        elif tab == 'canceled' and 0 <= row < len(canceled):
+            self.download_manager.retry_download(canceled[row]['url'])
+
+    def open_in_explorer(self, file_path):
+        if os.path.exists(file_path):
+            if sys.platform.startswith('win'):
+                os.startfile(os.path.dirname(file_path))
+            elif sys.platform.startswith('darwin'):
+                subprocess.run(['open', '--', os.path.dirname(file_path)])
+            else:
+                subprocess.run(['xdg-open', os.path.dirname(file_path)])

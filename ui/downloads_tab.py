@@ -1,0 +1,137 @@
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QLabel, QTabWidget)
+from PyQt5.QtCore import Qt, pyqtSignal
+import os
+import subprocess
+
+class DownloadsTab(QWidget):
+    # Signals for global actions
+    pause_all = pyqtSignal()
+    resume_all = pyqtSignal()
+    cancel_all = pyqtSignal()
+    # Signals for per-download actions: (row, action)
+    pause_download = pyqtSignal(int)
+    resume_download = pyqtSignal(int)
+    cancel_download = pyqtSignal(int)
+    retry_download = pyqtSignal(int, str)  # row, tab
+    open_in_explorer = pyqtSignal(str)     # file path
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        self.tabs = QTabWidget()
+        layout.addWidget(self.tabs)
+
+        # Active Tab
+        self.active_tab = QWidget()
+        self.active_layout = QVBoxLayout(self.active_tab)
+        controls_layout = QHBoxLayout()
+        self.pause_all_btn = QPushButton("Pause All")
+        self.resume_all_btn = QPushButton("Resume All")
+        self.cancel_all_btn = QPushButton("Cancel All")
+        controls_layout.addWidget(self.pause_all_btn)
+        controls_layout.addWidget(self.resume_all_btn)
+        controls_layout.addWidget(self.cancel_all_btn)
+        controls_layout.addStretch()
+        self.active_layout.addLayout(controls_layout)
+        self.active_table = QTableWidget(0, 5)
+        self.active_table.setHorizontalHeaderLabels(["File Name", "Status", "Progress", "Size", "Actions"])
+        self.active_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.active_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.active_layout.addWidget(self.active_table)
+        self.tabs.addTab(self.active_tab, "Active")
+
+        # Completed Tab
+        self.completed_tab = QWidget()
+        self.completed_layout = QVBoxLayout(self.completed_tab)
+        self.completed_table = QTableWidget(0, 3)
+        self.completed_table.setHorizontalHeaderLabels(["File Name", "Size", "Open"])
+        self.completed_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.completed_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.completed_layout.addWidget(self.completed_table)
+        self.tabs.addTab(self.completed_tab, "Completed")
+
+        # Failed Tab
+        self.failed_tab = QWidget()
+        self.failed_layout = QVBoxLayout(self.failed_tab)
+        self.failed_table = QTableWidget(0, 4)
+        self.failed_table.setHorizontalHeaderLabels(["File Name", "Status", "Size", "Retry"])
+        self.failed_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.failed_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.failed_layout.addWidget(self.failed_table)
+        self.tabs.addTab(self.failed_tab, "Failed")
+
+        # Canceled Tab
+        self.canceled_tab = QWidget()
+        self.canceled_layout = QVBoxLayout(self.canceled_tab)
+        self.canceled_table = QTableWidget(0, 4)
+        self.canceled_table.setHorizontalHeaderLabels(["File Name", "Status", "Size", "Retry"])
+        self.canceled_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.canceled_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.canceled_layout.addWidget(self.canceled_table)
+        self.tabs.addTab(self.canceled_tab, "Canceled")
+
+        # Connect global buttons
+        self.pause_all_btn.clicked.connect(self.pause_all)
+        self.resume_all_btn.clicked.connect(self.resume_all)
+        self.cancel_all_btn.clicked.connect(self.cancel_all)
+
+    def update_downloads(self, active, completed, failed, canceled):
+        # Active
+        self.active_table.setRowCount(len(active))
+        for row, d in enumerate(active):
+            self.active_table.setItem(row, 0, QTableWidgetItem(d['file_name']))
+            self.active_table.setItem(row, 1, QTableWidgetItem(d['status']))
+            progress_widget = QProgressBar()
+            progress_widget.setValue(d['progress'])
+            progress_widget.setTextVisible(True)
+            self.active_table.setCellWidget(row, 2, progress_widget)
+            self.active_table.setItem(row, 3, QTableWidgetItem(d['size']))
+            actions_widget = QWidget()
+            actions_layout = QHBoxLayout(actions_widget)
+            actions_layout.setContentsMargins(0, 0, 0, 0)
+            if d['can_pause']:
+                pause_btn = QPushButton("Pause")
+                pause_btn.clicked.connect(lambda _, r=row: self.pause_download.emit(r))
+                actions_layout.addWidget(pause_btn)
+            if d['can_resume']:
+                resume_btn = QPushButton("Resume")
+                resume_btn.clicked.connect(lambda _, r=row: self.resume_download.emit(r))
+                actions_layout.addWidget(resume_btn)
+            if d['can_cancel']:
+                cancel_btn = QPushButton("Cancel")
+                cancel_btn.clicked.connect(lambda _, r=row: self.cancel_download.emit(r))
+                actions_layout.addWidget(cancel_btn)
+            actions_layout.addStretch()
+            self.active_table.setCellWidget(row, 4, actions_widget)
+
+        # Completed
+        self.completed_table.setRowCount(len(completed))
+        for row, d in enumerate(completed):
+            self.completed_table.setItem(row, 0, QTableWidgetItem(d['file_name']))
+            self.completed_table.setItem(row, 1, QTableWidgetItem(d['size']))
+            open_btn = QPushButton("Open")
+            open_btn.clicked.connect(lambda _, path=d['file_path']: self.open_in_explorer.emit(path))
+            self.completed_table.setCellWidget(row, 2, open_btn)
+
+        # Failed
+        self.failed_table.setRowCount(len(failed))
+        for row, d in enumerate(failed):
+            self.failed_table.setItem(row, 0, QTableWidgetItem(d['file_name']))
+            self.failed_table.setItem(row, 1, QTableWidgetItem(d['status']))
+            self.failed_table.setItem(row, 2, QTableWidgetItem(d['size']))
+            retry_btn = QPushButton("Retry")
+            retry_btn.clicked.connect(lambda _, r=row: self.retry_download.emit(r, 'failed'))
+            self.failed_table.setCellWidget(row, 3, retry_btn)
+
+        # Canceled
+        self.canceled_table.setRowCount(len(canceled))
+        for row, d in enumerate(canceled):
+            self.canceled_table.setItem(row, 0, QTableWidgetItem(d['file_name']))
+            self.canceled_table.setItem(row, 1, QTableWidgetItem(d['status']))
+            self.canceled_table.setItem(row, 2, QTableWidgetItem(d['size']))
+            retry_btn = QPushButton("Retry")
+            retry_btn.clicked.connect(lambda _, r=row: self.retry_download.emit(r, 'canceled'))
+            self.canceled_table.setCellWidget(row, 3, retry_btn) 

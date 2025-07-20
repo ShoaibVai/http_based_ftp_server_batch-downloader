@@ -115,6 +115,7 @@ class DownloadManager(QObject):
     error = pyqtSignal(str, str)
     size_calc_progress = pyqtSignal(int, int)
     size_calc_finished = pyqtSignal()
+    downloads_updated = pyqtSignal()
 
     def __init__(self, config):
         super().__init__()
@@ -123,15 +124,14 @@ class DownloadManager(QObject):
         self.total_bytes_to_download, self.total_bytes_downloaded = 0, 0
         self.progress_mutex = QMutex()
         self.size_calculator = None
+        # Persistent download state
+        self.downloads = []  # List of dicts: {url, rel_path, status, progress, size, file_path, ...}
 
     def start_downloads(self, file_tuples, base_folder):
-        # file_tuples: list of (url, rel_path)
         self.base_folder = base_folder
-        # Only add files that are not already in the queue or being downloaded
-        new_urls = [url for url, _ in file_tuples if url not in [u for u, _ in self.download_queue] and url not in self.active_workers]
+        new_urls = [url for url, _ in file_tuples if url not in [d['url'] for d in self.downloads if d['status'] in ('Queued','Downloading','Paused')] and url not in self.active_workers]
         if not new_urls:
             return
-        # Calculate sizes for new files only
         self.size_calculator = SizeCalculator(new_urls, self.config)
         self.size_calculator.progress.connect(self.size_calc_progress)
         self.size_calculator.finished.connect(lambda total_size, file_sizes_map: self._on_size_calc_finished(total_size, file_sizes_map, file_tuples))
@@ -140,15 +140,22 @@ class DownloadManager(QObject):
 
     def _on_size_calc_finished(self, total_size, file_sizes_map, file_tuples):
         self.size_calc_finished.emit()
-        # Add new file sizes to the map and update total_bytes_to_download
         for url, size in file_sizes_map.items():
             if url not in self.file_sizes:
                 self.file_sizes[url] = size
                 self.total_bytes_to_download += size
-        # Append new files to the queue
         for url, rel_path in file_tuples:
-            if url in file_sizes_map and (url, rel_path) not in self.download_queue and url not in self.active_workers:
+            if url in file_sizes_map and not any(d['url'] == url and d['rel_path'] == rel_path for d in self.downloads):
+                self.downloads.append({
+                    'url': url,
+                    'rel_path': rel_path,
+                    'status': 'Queued',
+                    'progress': 0,
+                    'size': self.file_sizes[url],
+                    'file_path': os.path.join(self.base_folder, rel_path),
+                })
                 self.download_queue.append((url, rel_path))
+        self.downloads_updated.emit()
         if not self.download_queue and not self.active_workers:
             self.all_finished.emit()
         else:
@@ -156,7 +163,6 @@ class DownloadManager(QObject):
 
     def check_queue(self):
         if not self.download_queue and not self.active_workers:
-            # Use a small tolerance for floating point comparisons
             if self.total_bytes_downloaded >= self.total_bytes_to_download - 1:
                 self.all_finished.emit()
             return
@@ -169,8 +175,10 @@ class DownloadManager(QObject):
             worker.progress.connect(self.file_progress)
             worker.status_changed.connect(self.file_status_changed)
             self.active_workers[url] = worker
+            self._update_download_status(url, 'Downloading')
             self.file_started.emit(url, os.path.basename(url))
             worker.start()
+            self.downloads_updated.emit()
 
     def _on_worker_finished(self, worker_id, bytes_downloaded):
         with QMutexLocker(self.progress_mutex):
@@ -178,29 +186,75 @@ class DownloadManager(QObject):
             self.overall_progress.emit(self.total_bytes_downloaded, self.total_bytes_to_download)
         if worker_id in self.active_workers:
             self.file_finished.emit(worker_id, os.path.basename(self.active_workers[worker_id].url))
+            self._update_download_status(worker_id, 'Completed')
             del self.active_workers[worker_id]
+            self.downloads_updated.emit()
             self.check_queue()
 
     def _on_worker_error(self, worker_id, message):
         if worker_id in self.active_workers:
             self.error.emit(os.path.basename(self.active_workers[worker_id].url), message)
             self.file_status_changed.emit(worker_id, "Error")
+            self._update_download_status(worker_id, 'Failed')
             del self.active_workers[worker_id]
+            self.downloads_updated.emit()
             self.check_queue()
 
+    def _update_download_status(self, url, status):
+        for d in self.downloads:
+            if d['url'] == url:
+                d['status'] = status
+                if status == 'Completed':
+                    d['progress'] = 100
+                break
+
+    def update_progress(self, url, downloaded, total):
+        for d in self.downloads:
+            if d['url'] == url:
+                d['progress'] = int((downloaded / total) * 100) if total else 0
+                break
+        self.downloads_updated.emit()
+
     def pause_file(self, worker_id):
-        if worker_id in self.active_workers: self.active_workers[worker_id].pause()
+        if worker_id in self.active_workers: self.active_workers[worker_id].pause(); self._update_download_status(worker_id, 'Paused'); self.downloads_updated.emit()
     def resume_file(self, worker_id):
-        if worker_id in self.active_workers: self.active_workers[worker_id].resume()
+        if worker_id in self.active_workers: self.active_workers[worker_id].resume(); self._update_download_status(worker_id, 'Downloading'); self.downloads_updated.emit()
     def cancel_file(self, worker_id):
-        if worker_id in self.active_workers: self.active_workers[worker_id].stop()
+        if worker_id in self.active_workers: self.active_workers[worker_id].stop(); self._update_download_status(worker_id, 'Canceled'); self.downloads_updated.emit()
     def pause_all(self):
-        for worker in self.active_workers.values(): worker.pause()
+        for worker in self.active_workers.values(): worker.pause(); self._update_download_status(worker.worker_id, 'Paused')
+        self.downloads_updated.emit()
     def resume_all(self):
-        for worker in self.active_workers.values(): worker.resume()
+        for worker in self.active_workers.values(): worker.resume(); self._update_download_status(worker.worker_id, 'Downloading')
+        self.downloads_updated.emit()
     def cancel_all(self):
-        if self.size_calculator and self.size_calculator.isRunning(): self.size_calculator.stop()
+        # Cancel all active workers
+        for worker in self.active_workers.values():
+            worker.stop()
+            self._update_download_status(worker.worker_id, 'Canceled')
+        # Mark all queued downloads as canceled
+        for url, rel_path in self.download_queue:
+            for d in self.downloads:
+                if d['url'] == url and d['rel_path'] == rel_path and d['status'] == 'Queued':
+                    d['status'] = 'Canceled'
+                    d['progress'] = 0
         self.download_queue.clear()
-        for worker in list(self.active_workers.values()): worker.stop()
-        self.active_workers.clear()
-        self.all_finished.emit()
+        self.downloads_updated.emit()
+
+    def retry_download(self, url):
+        # Find the download and re-queue it
+        for d in self.downloads:
+            if d['url'] == url and d['status'] in ('Failed', 'Canceled'):
+                d['status'] = 'Queued'
+                d['progress'] = 0
+                self.download_queue.append((d['url'], d['rel_path']))
+                self.downloads_updated.emit()
+                self.check_queue()
+                break
+
+    def get_downloads_by_status(self):
+        active = [d for d in self.downloads if d['status'] in ('Queued','Downloading','Paused')]
+        completed = [d for d in self.downloads if d['status'] == 'Completed']
+        failed = [d for d in self.downloads if d['status'] == 'Failed']
+        canceled = [d for d in self.downloads if d['status'] == 'Canceled']
+        return active, completed, failed, canceled
