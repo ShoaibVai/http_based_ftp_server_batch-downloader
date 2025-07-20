@@ -18,6 +18,7 @@ from core.downloader import DownloadManager
 from config.manager import ConfigManager
 from utils.logger import setup_logger
 from ui.downloads_tab import DownloadsTab
+from ui.settings_tab import SettingsTab
 import sys
 import subprocess
 
@@ -71,6 +72,15 @@ class MainWindow(QMainWindow):
         # Downloads tab
         self.downloads_tab = DownloadsTab()
         self.tab_widget.addTab(self.downloads_tab, "Downloads")
+        # Settings tab
+        self.settings_tab = SettingsTab(
+            concurrent=self.config_manager.get("max_concurrent_downloads"),
+            depth=self.config_manager.get("listing_depth")
+        )
+        self.settings_tab.concurrent_changed.connect(lambda val: self.config_manager.set("max_concurrent_downloads", val))
+        self.settings_tab.depth_changed.connect(lambda val: self.config_manager.set("listing_depth", val))
+        self.settings_tab.view_log.connect(self.show_error_log)
+        self.tab_widget.addTab(self.settings_tab, "Settings")
 
     def init_downloader_tab(self, tab_widget):
         main_layout = QVBoxLayout(tab_widget)
@@ -89,15 +99,8 @@ class MainWindow(QMainWindow):
         self.tree_widget.setAlternatingRowColors(True)
         self.tree_widget.setStyleSheet("QTreeWidget { font-size: 14px; } QTreeWidget::item:selected { background: #e0f7fa; }")
         splitter.addWidget(self.tree_widget)
-        progress_frame = QFrame(); progress_layout = QVBoxLayout(progress_frame)
-        overall_progress_layout = QHBoxLayout(); overall_progress_layout.addWidget(QLabel("Overall Progress:"))
-        self.overall_progress = QProgressBar(); self.overall_progress.setTextVisible(True); self.overall_progress.setValue(0)
-        self.overall_progress.setFormat("%p%")
-        self.overall_progress.setMinimumHeight(24)
-        self.overall_progress.setStyleSheet("QProgressBar { border-radius: 8px; background: #23272b; color: #8B0000; text-align: center; } QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00bcd4, stop:1 #8bc34a); border-radius: 8px; }")
-        overall_progress_layout.addWidget(self.overall_progress); progress_layout.addLayout(overall_progress_layout)
-        self.per_file_progress_layout = QVBoxLayout(); progress_layout.addLayout(self.per_file_progress_layout)
-        progress_layout.addStretch(); splitter.addWidget(progress_frame); splitter.setSizes([500, 300])
+        # Remove progress_frame and per-file progress bars
+        # Remove overall_progress and per_file_progress_layout
         download_controls_layout = QHBoxLayout()
         self.download_path_input = QLineEdit(self.config_manager.get("default_download_path"))
         self.download_path_input.setMinimumHeight(32)
@@ -116,20 +119,24 @@ class MainWindow(QMainWindow):
         self.spinner_label.setVisible(False)
         main_layout.addWidget(self.spinner_label, alignment=Qt.AlignRight)
         self.setStyleSheet('''
-            QMainWindow { background: #181c1f; }
-            QPushButton { border-radius: 8px; padding: 6px 16px; font-size: 14px; background: #23272b; color: #8B0000; }
-            QPushButton:pressed { background: #263238; color: #8B0000; }
-            QPushButton:hover { background: #37474f; color: #8B0000; }
-            QLineEdit { border: 1px solid #37474f; border-radius: 8px; padding: 4px 8px; font-size: 14px; background: #23272b; color: #8B0000; selection-background-color: #00bcd4; selection-color: #181c1f; }
-            QLabel { font-size: 14px; color: #8B0000; }
-            QToolBar { background: #23272b; border-bottom: 1px solid #263238; }
-            QStatusBar { background: #23272b; border-top: 1px solid #263238; color: #8B0000; }
-            QTreeWidget { font-size: 14px; background: #23272b; color: #8B0000; alternate-background-color: #21252b; }
-            QTreeWidget::item:selected { background: #00bcd4; color: #8B0000; }
-            QTreeWidget::item:hover { background: #263238; color: #8B0000; }
-            QHeaderView::section { background: #263238; color: #8B0000; border: none; }
-            QProgressBar { border-radius: 8px; background: #23272b; color: #8B0000; text-align: center; }
-            QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00bcd4, stop:1 #8bc34a); border-radius: 8px; }
+            QMainWindow { background: #111111; }
+            QPushButton { border-radius: 8px; padding: 6px 16px; font-size: 14px; background: #222222; color: #ffffff; }
+            QPushButton:pressed { background: #333333; color: #ffffff; }
+            QPushButton:hover { background: #444444; color: #ffffff; }
+            QLineEdit { border: 1px solid #444444; border-radius: 8px; padding: 4px 8px; font-size: 14px; background: #222222; color: #ffffff; selection-background-color: #ffffff; selection-color: #111111; }
+            QLabel { font-size: 14px; color: #ffffff; }
+            QToolBar { background: #181818; border-bottom: 1px solid #222222; }
+            QStatusBar { background: #181818; border-top: 1px solid #222222; color: #ffffff; }
+            QTreeWidget { font-size: 14px; background: #181818; color: #ffffff; alternate-background-color: #222222; }
+            QTreeWidget::item:selected { background: #444444; color: #ffffff; }
+            QTreeWidget::item:hover { background: #222222; color: #ffffff; }
+            QHeaderView::section { background: #222222; color: #ffffff; border: none; }
+            QProgressBar { border-radius: 8px; background: #222222; color: #ffffff; text-align: center; }
+            QProgressBar::chunk { background: #ffffff; border-radius: 8px; }
+            QTabWidget::pane { border: 1px solid #444444; background: #181818; }
+            QTabBar::tab { background: #222222; color: #ffffff; padding: 8px 16px; border-top-left-radius: 4px; border-top-right-radius: 4px; }
+            QTabBar::tab:selected { background: #333333; color: #ffffff; }
+            QTabBar::tab:hover { background: #444444; color: #ffffff; }
         ''')
 
     def connect_signals(self):
@@ -160,20 +167,9 @@ class MainWindow(QMainWindow):
 
     def create_toolbars(self):
         toolbar = QToolBar("Main Toolbar"); self.addToolBar(toolbar)
-        # Create view_log_action here
-        self.view_log_action = QAction(self.style().standardIcon(QStyle.SP_FileIcon), "View Log", self)
-        self.view_log_action.triggered.connect(self.show_error_log)
-        toolbar.addSeparator(); toolbar.addAction(self.view_log_action)
-        spacer = QWidget(); spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred); toolbar.addWidget(spacer)
-        toolbar.addWidget(QLabel("Concurrent:")); self.concurrency_spinbox = QSpinBox()
-        self.concurrency_spinbox.setRange(1, 16); self.concurrency_spinbox.setValue(self.config_manager.get("max_concurrent_downloads"))
-        self.concurrency_spinbox.valueChanged.connect(lambda val: self.config_manager.set("max_concurrent_downloads", val))
-        toolbar.addWidget(self.concurrency_spinbox)
+        # Create view_log_action here (not needed, now in settings tab)
+        # Remove concurrent and depth spinboxes from toolbar
         toolbar.addSeparator()
-        toolbar.addWidget(QLabel("Depth:")); self.depth_spinbox = QSpinBox()
-        self.depth_spinbox.setRange(1, 10); self.depth_spinbox.setValue(self.config_manager.get("listing_depth"))
-        self.depth_spinbox.valueChanged.connect(lambda val: self.config_manager.set("listing_depth", val))
-        toolbar.addWidget(self.depth_spinbox)
 
     def create_status_bar(self):
         self.statusBar = QStatusBar(); self.setStatusBar(self.statusBar); self.statusBar.showMessage("Ready")
@@ -227,25 +223,8 @@ class MainWindow(QMainWindow):
         self.set_ui_state(False, "Ready"); self.overall_progress.setValue(0); self.overall_progress.setFormat("%p%")
 
     def on_file_download_started(self, worker_id, filename):
-        hbox = QHBoxLayout(); status_label = QLabel(f"{filename}: Queued...")
-        progress_bar = QProgressBar()
-        progress_bar.setMinimumHeight(18)
-        progress_bar.setStyleSheet("QProgressBar { border-radius: 6px; background: #23272b; color: #8B0000; text-align: center; } QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff9800, stop:1 #ffeb3b); border-radius: 6px; }")
-        buttons = {
-            'pause': QPushButton(self.style().standardIcon(QStyle.SP_MediaPause), ""),
-            'resume': QPushButton(self.style().standardIcon(QStyle.SP_MediaPlay), ""),
-            'cancel': QPushButton(self.style().standardIcon(QStyle.SP_MediaStop), "")
-        }
-        for btn in buttons.values():
-            btn.setMinimumHeight(18)
-            btn.setStyleSheet("QPushButton { border-radius: 6px; background: #263238; color: #8B0000; } QPushButton:hover { background: #37474f; color: #8B0000; }")
-        buttons['pause'].clicked.connect(partial(self.download_manager.pause_file, worker_id))
-        buttons['resume'].clicked.connect(partial(self.download_manager.resume_file, worker_id))
-        buttons['cancel'].clicked.connect(partial(self.download_manager.cancel_file, worker_id))
-        hbox.addWidget(status_label, 4); hbox.addWidget(progress_bar, 6)
-        for btn in buttons.values(): hbox.addWidget(btn)
-        self.per_file_progress_layout.addLayout(hbox)
-        self.file_progress_widgets[worker_id] = {'layout': hbox, 'label': status_label, 'progress': progress_bar, **buttons}
+        # No per-file progress UI in main window anymore
+        pass
 
     def on_file_progress(self, worker_id, downloaded_bytes, total_bytes):
         if worker_id in self.file_progress_widgets:
@@ -442,6 +421,13 @@ class MainWindow(QMainWindow):
             [fmt(d) for d in failed],
             [fmt(d) for d in canceled],
         )
+        # Update Downloads tab indicator
+        self.set_downloads_tab_indicator(len(active) > 0)
+
+    def set_downloads_tab_indicator(self, active):
+        # Add a small dot to the Downloads tab label if there are active downloads
+        dot = " ●" if active else ""
+        self.tab_widget.setTabText(1, f"Downloads{dot}")
 
     def _downloads_tab_action(self, row, action):
         # Find the download by row in the current active list
