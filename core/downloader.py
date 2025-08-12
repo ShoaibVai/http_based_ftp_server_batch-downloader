@@ -171,7 +171,7 @@ class DownloadManager(QObject):
         while self.download_queue and len(self.active_workers) < max_workers:
             url, rel_path = self.download_queue.pop(0)
             # Find the download entry to get its specific file path
- for download_entry in self.downloads:
+            for download_entry in self.downloads:
                 if download_entry['url'] == url and download_entry['rel_path'] == rel_path and download_entry['status'] == 'Queued':
                     base_folder = os.path.dirname(download_entry['file_path'])
                     worker = DownloadWorker(url, url, rel_path, base_folder, self.config, self.file_sizes.get(url, 0))
