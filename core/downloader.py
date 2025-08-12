@@ -124,7 +124,6 @@ class DownloadManager(QObject):
         self.config = config
         self.download_queue, self.active_workers, self.file_sizes = [], {}, {}
         self.total_bytes_to_download, self.total_bytes_downloaded = 0, 0
-        self.progress_mutex = QMutex()
         self.size_calculator = None
         # Persistent download state
         self.downloads = []  # List of dicts: {url, rel_path, status, progress, size, file_path, ...}
@@ -171,20 +170,26 @@ class DownloadManager(QObject):
         max_workers = self.config.get('max_concurrent_downloads', 4)
         while self.download_queue and len(self.active_workers) < max_workers:
             url, rel_path = self.download_queue.pop(0)
-            worker = DownloadWorker(url, url, rel_path, self.base_folder, self.config, self.file_sizes.get(url, 0))
-            worker.finished.connect(self._on_worker_finished)
-            worker.error.connect(self._on_worker_error)
-            worker.progress.connect(self.file_progress)
-            worker.progress.connect(self._on_file_progress_update)
-            worker.status_changed.connect(self.file_status_changed)
-            self.active_workers[url] = worker
-            self._update_download_status(url, 'Downloading')
-            self.file_started.emit(url, os.path.basename(url))
-            worker.start()
-            self.downloads_updated.emit()
+            # Find the download entry to get its specific file path
+ for download_entry in self.downloads:
+                if download_entry['url'] == url and download_entry['rel_path'] == rel_path and download_entry['status'] == 'Queued':
+                    base_folder = os.path.dirname(download_entry['file_path'])
+                    worker = DownloadWorker(url, url, rel_path, base_folder, self.config, self.file_sizes.get(url, 0))
+                    worker.finished.connect(self._on_worker_finished)
+                    worker.error.connect(self._on_worker_error)
+                    worker.progress.connect(self.file_progress)
+                    worker.progress.connect(self._on_file_progress_update)
+                    worker.status_changed.connect(self.file_status_changed)
+                    self.active_workers[url] = worker
+                    self._update_download_status(url, 'Downloading')
+                    self.file_started.emit(url, os.path.basename(url))
+                    worker.start()
+                    self.downloads_updated.emit()
+                    break # Found the entry and started the worker
 
     def _on_worker_finished(self, worker_id, bytes_downloaded):
-        with QMutexLocker(self.progress_mutex):
+        # Use a mutex if updating shared overall progress is still needed
+        # with QMutexLocker(self.progress_mutex):
             self.total_bytes_downloaded += bytes_downloaded
             self.overall_progress.emit(self.total_bytes_downloaded, self.total_bytes_to_download)
         if worker_id in self.active_workers:
