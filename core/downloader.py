@@ -194,11 +194,11 @@ class DownloadManager(QObject):
         self.overall_progress.emit(self.total_bytes_downloaded, self.total_bytes_to_download)
         with QMutexLocker(self.mutex):  # Added mutex lock
             if worker_id in self.active_workers: # This line and the following lines were incorrectly unindented
-                self.file_finished.emit(worker_id, os.path.basename(self.active_workers[worker_id].url)) # Also unindented
-                self._update_download_status(worker_id, 'Completed') # Also unindented
- del self.active_workers[worker_id]
- self.downloads_updated.emit()
- self.check_queue()
+                self.file_finished.emit(worker_id, os.path.basename(self.active_workers[worker_id].url))
+                self._update_download_status(worker_id, 'Completed')
+                del self.active_workers[worker_id]
+                self.downloads_updated.emit()
+                self.check_queue()
 
     def _on_worker_error(self, worker_id, message):
         if worker_id in self.active_workers:
