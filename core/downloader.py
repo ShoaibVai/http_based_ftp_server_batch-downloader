@@ -124,7 +124,6 @@ class DownloadManager(QObject):
         self.config = config
         self.download_queue, self.active_workers, self.file_sizes = [], {}, {}
         self.total_bytes_to_download, self.total_bytes_downloaded = 0, 0
-        self.progress_mutex = QMutex()
         self.size_calculator = None
         # Persistent download state
         self.downloads = []  # List of dicts: {url, rel_path, status, progress, size, file_path, ...}
@@ -175,6 +174,7 @@ class DownloadManager(QObject):
             return
         max_workers = self.config.get('max_concurrent_downloads', 4)
         while self.download_queue and len(self.active_workers) < max_workers:
+
             # Use base_folder from the queue entry
             url, rel_path, base_folder = self.download_queue.pop(0)
             logger.info(f"Starting download: {os.path.basename(rel_path)} to folder: {base_folder}")
@@ -191,15 +191,17 @@ class DownloadManager(QObject):
             self.downloads_updated.emit()
 
     def _on_worker_finished(self, worker_id, bytes_downloaded):
-        with QMutexLocker(self.progress_mutex):
-            self.total_bytes_downloaded += bytes_downloaded
-            self.overall_progress.emit(self.total_bytes_downloaded, self.total_bytes_to_download)
+        # Use a mutex if updating shared overall progress is still needed
+        # with QMutexLocker(self.progress_mutex):
+        self.total_bytes_downloaded += bytes_downloaded
+
+        self.overall_progress.emit(self.total_bytes_downloaded, self.total_bytes_to_download)
         if worker_id in self.active_workers:
-            self.file_finished.emit(worker_id, os.path.basename(self.active_workers[worker_id].url))
-            self._update_download_status(worker_id, 'Completed')
-            del self.active_workers[worker_id]
-            self.downloads_updated.emit()
-            self.check_queue()
+ self.file_finished.emit(worker_id, os.path.basename(self.active_workers[worker_id].url))
+ self._update_download_status(worker_id, 'Completed')
+ del self.active_workers[worker_id]
+                self.downloads_updated.emit()
+                self.check_queue()
 
     def _on_worker_error(self, worker_id, message):
         if worker_id in self.active_workers:
