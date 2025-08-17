@@ -129,17 +129,17 @@ class DownloadManager(QObject):
         self.downloads = []  # List of dicts: {url, rel_path, status, progress, size, file_path, ...}
 
     def start_downloads(self, file_tuples, base_folder):
-        self.base_folder = base_folder
+        # Remove storing base_folder as instance variable
         new_urls = [url for url, _ in file_tuples if url not in [d['url'] for d in self.downloads if d['status'] in ('Queued','Downloading','Paused')] and url not in self.active_workers]
         if not new_urls:
             return
         self.size_calculator = SizeCalculator(new_urls, self.config)
         self.size_calculator.progress.connect(self.size_calc_progress)
-        self.size_calculator.finished.connect(lambda total_size, file_sizes_map: self._on_size_calc_finished(total_size, file_sizes_map, file_tuples))
+        self.size_calculator.finished.connect(lambda total_size, file_sizes_map: self._on_size_calc_finished(total_size, file_sizes_map, file_tuples, base_folder))
         self.size_calculator.error.connect(lambda msg: self.error.emit("Size Calculation", msg))
         self.size_calculator.start()
 
-    def _on_size_calc_finished(self, total_size, file_sizes_map, file_tuples):
+    def _on_size_calc_finished(self, total_size, file_sizes_map, file_tuples, base_folder):
         self.size_calc_finished.emit()
         for url, size in file_sizes_map.items():
             if url not in self.file_sizes:
@@ -147,15 +147,20 @@ class DownloadManager(QObject):
                 self.total_bytes_to_download += size
         for url, rel_path in file_tuples:
             if url in file_sizes_map and not any(d['url'] == url and d['rel_path'] == rel_path for d in self.downloads):
+                # Store base_folder with each download item
+                full_path = os.path.join(base_folder, rel_path)
+                logger.info(f"Adding download: {os.path.basename(rel_path)} to folder: {base_folder}")
                 self.downloads.append({
                     'url': url,
                     'rel_path': rel_path,
                     'status': 'Queued',
                     'progress': 0,
                     'size': self.file_sizes[url],
-                    'file_path': os.path.join(self.base_folder, rel_path),
+                    'file_path': full_path,
+                    'base_folder': base_folder  # Store base_folder per download
                 })
-                self.download_queue.append((url, rel_path))
+                # Include base_folder in the download queue
+                self.download_queue.append((url, rel_path, base_folder))
         self.downloads_updated.emit()
         if not self.download_queue and not self.active_workers:
             self.all_finished.emit()
@@ -169,23 +174,21 @@ class DownloadManager(QObject):
             return
         max_workers = self.config.get('max_concurrent_downloads', 4)
         while self.download_queue and len(self.active_workers) < max_workers:
-            url, rel_path = self.download_queue.pop(0)
-            # Find the download entry to get its specific file path
-            for download_entry in self.downloads:
-                if download_entry['url'] == url and download_entry['rel_path'] == rel_path and download_entry['status'] == 'Queued':
-                    base_folder = os.path.dirname(download_entry['file_path'])
-                    worker = DownloadWorker(url, url, rel_path, base_folder, self.config, self.file_sizes.get(url, 0))
-                    worker.finished.connect(self._on_worker_finished)
-                    worker.error.connect(self._on_worker_error)
-                    worker.progress.connect(self.file_progress)
-                    worker.progress.connect(self._on_file_progress_update)
-                    worker.status_changed.connect(self.file_status_changed)
-                    self.active_workers[url] = worker
-                    self._update_download_status(url, 'Downloading')
-                    self.file_started.emit(url, os.path.basename(url))
-                    worker.start()
-                    self.downloads_updated.emit()
-                    break # Found the entry and started the worker
+
+            # Use base_folder from the queue entry
+            url, rel_path, base_folder = self.download_queue.pop(0)
+            logger.info(f"Starting download: {os.path.basename(rel_path)} to folder: {base_folder}")
+            worker = DownloadWorker(url, url, rel_path, base_folder, self.config, self.file_sizes.get(url, 0))
+            worker.finished.connect(self._on_worker_finished)
+            worker.error.connect(self._on_worker_error)
+            worker.progress.connect(self.file_progress)
+            worker.progress.connect(self._on_file_progress_update)
+            worker.status_changed.connect(self.file_status_changed)
+            self.active_workers[url] = worker
+            self._update_download_status(url, 'Downloading')
+            self.file_started.emit(url, os.path.basename(url))
+            worker.start()
+            self.downloads_updated.emit()
 
     def _on_worker_finished(self, worker_id, bytes_downloaded):
         # Use a mutex if updating shared overall progress is still needed
@@ -246,7 +249,7 @@ class DownloadManager(QObject):
             worker.stop()
             self._update_download_status(worker.worker_id, 'Canceled')
         # Mark all queued downloads as canceled
-        for url, rel_path in self.download_queue:
+        for url, rel_path, base_folder in self.download_queue:
             for d in self.downloads:
                 if d['url'] == url and d['rel_path'] == rel_path and d['status'] == 'Queued':
                     d['status'] = 'Canceled'
@@ -260,7 +263,8 @@ class DownloadManager(QObject):
             if d['url'] == url and d['status'] in ('Failed', 'Canceled'):
                 d['status'] = 'Queued'
                 d['progress'] = 0
-                self.download_queue.append((d['url'], d['rel_path']))
+                # Use the stored base_folder for this download
+                self.download_queue.append((d['url'], d['rel_path'], d['base_folder']))
                 self.downloads_updated.emit()
                 self.check_queue()
                 break
