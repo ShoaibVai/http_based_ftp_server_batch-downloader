@@ -348,9 +348,29 @@ class MainWindow(QMainWindow):
     def fetch_directory_listing(self):
         # Allow fetching new directory listings even if downloads are in progress
         url = self.url_input.text().strip()
-        if not url: self.show_message("Warning", "Please enter a URL.", QMessageBox.Warning); return
-        self.tree_widget.clear(); self.path_to_item_map.clear()
-        self.set_ui_state(False, f"Fetching from {url}..."); self.fetch_button.setEnabled(False); self.cancel_fetch_button.setEnabled(True)
+        if not url: 
+            self.show_message("Warning", "Please enter a URL.", QMessageBox.Warning)
+            return
+        
+        # Validate URL before proceeding
+        from core.url_utils import ensure_url_encoded, is_valid_ftp_url
+        
+        encoded_url = ensure_url_encoded(url)
+        if not encoded_url or not is_valid_ftp_url(encoded_url):
+            self.show_message("Error", f"Invalid FTP/HTTP URL: {url}", QMessageBox.Critical)
+            return
+        
+        # Update URL input with properly encoded URL if different
+        if encoded_url != url:
+            self.url_input.setText(encoded_url)
+            url = encoded_url
+        
+        self.tree_widget.clear()
+        self.path_to_item_map.clear()
+        self.set_ui_state(False, f"Fetching from {url}...")
+        self.fetch_button.setEnabled(False)
+        self.cancel_fetch_button.setEnabled(True)
+        
         self.lister_thread = DirectoryLister(url, self.config_manager)
         self.lister_thread.item_found.connect(self.add_tree_item)
         self.lister_thread.error.connect(self.on_listing_error)
@@ -647,15 +667,28 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(styles.get(theme_name, styles["Colorful"]))
     
     def handle_browser_url_selected(self, url):
-        """Handle URL selection from browser tab."""
-        # Switch to downloader tab
-        self.tab_widget.setCurrentIndex(0)
+        """Handle URL selection from browser tab with proper validation."""
+        from core.url_utils import ensure_url_encoded, is_valid_ftp_url
         
-        # Set URL in the input field
-        self.url_input.setText(url)
+        # Validate and encode the URL
+        encoded_url = ensure_url_encoded(url)
         
-        # Automatically start fetching directory listing
-        self.fetch_directory_listing()
+        if encoded_url and is_valid_ftp_url(encoded_url):
+            # Switch to downloader tab
+            self.tab_widget.setCurrentIndex(0)
+            
+            # Set URL in the input field
+            self.url_input.setText(encoded_url)
+            
+            # Show status message
+            self.statusBar.showMessage(f"URL transferred from browser: {encoded_url}", 5000)
+            
+            # Automatically start fetching directory listing
+            self.fetch_directory_listing()
+        else:
+            # Show error message
+            self.statusBar.showMessage("Invalid URL received from browser", 5000)
+            logger.error(f"Invalid URL from browser: {url}")
     
     def set_url_from_browser(self, url):
         """Set URL in downloader from browser (alternative method)."""

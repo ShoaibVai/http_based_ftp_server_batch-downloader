@@ -12,6 +12,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QUrl
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from core.bookmark_manager import BookmarkManager
+from core.url_utils import ensure_url_encoded, is_valid_ftp_url, get_display_url
 
 logger = logging.getLogger(__name__)
 
@@ -146,32 +147,61 @@ class BrowserTab(QWidget):
         self.category_dropdown.currentTextChanged.connect(self.on_category_changed)
         self.use_link_button.clicked.connect(self.use_current_link)
         
-        # Connect web view signals
-        self.browser_view.urlChanged.connect(self.update_address_bar)
+        # Connect web view signals with enhanced handling
+        self.browser_view.urlChanged.connect(self.on_url_changed)
+        self.browser_view.loadFinished.connect(self.on_load_finished)
     
     def load_homepage(self):
         """Load the bookmark homepage."""
         try:
             html_content = self.bookmark_manager.generate_bookmarks_html()
             self.browser_view.setHtml(html_content)
-            self.address_bar.setText("bookmarks://home")
+            self.address_bar.setText("Bookmarks Homepage")
+            self.use_link_button.setEnabled(False)  # Disable for homepage
         except Exception as e:
             logger.error(f"Error loading homepage: {e}")
             self.browser_view.setHtml("<h1>Error loading bookmarks</h1>")
+            self.address_bar.setText("Error")
+            self.use_link_button.setEnabled(False)
     
     def navigate_to_url(self):
         """Navigate to the URL in the address bar."""
         url = self.address_bar.text().strip()
-        if url and url != "bookmarks://home":
+        if url and url not in ("Bookmarks Homepage", "Error"):
             if not url.startswith(('http://', 'https://', 'ftp://')):
                 url = 'http://' + url
             self.browser_view.setUrl(QUrl(url))
     
+    def on_url_changed(self, qurl):
+        """Handle URL changes and update UI state."""
+        self.update_address_bar(qurl)
+        
+        # Enable/disable "Use This Link" button based on URL validity
+        url_string = qurl.toString()
+        if url_string and qurl.scheme() in ['ftp', 'http', 'https']:
+            self.use_link_button.setEnabled(True)
+        else:
+            self.use_link_button.setEnabled(False)
+    
     def update_address_bar(self, qurl):
-        """Update the address bar when the URL changes."""
-        url = qurl.toString()
-        if url != "about:blank":
-            self.address_bar.setText(url)
+        """Update the address bar with user-friendly URL display."""
+        url_string = qurl.toString()
+        if url_string == "about:blank":
+            return
+        elif url_string.startswith("data:"):
+            # This is our bookmark homepage
+            self.address_bar.setText("Bookmarks Homepage")
+        else:
+            # Display user-friendly (decoded) URL for readability
+            display_url = get_display_url(url_string)
+            self.address_bar.setText(display_url)
+    
+    def on_load_finished(self, success):
+        """Handle page load completion."""
+        if not success:
+            self.handle_navigation_error()
+        else:
+            logger.debug("Page loaded successfully")
     
     def on_server_changed(self, server_name):
         """Handle server selection change."""
@@ -198,28 +228,60 @@ class BrowserTab(QWidget):
                 self.browser_view.setUrl(QUrl(url))
     
     def get_encoded_url(self):
-        """Get the current URL with proper percent-encoding."""
-        current_url = self.browser_view.url().toString()
-        if current_url == "about:blank" or current_url.startswith("bookmarks://"):
-            return ""
-        return current_url
+        """Get the current URL with proper percent-encoding for FTP operations."""
+        current_qurl = self.browser_view.url()
+        url_string = current_qurl.toString()
+        
+        # Handle special cases
+        if (url_string == "about:blank" or 
+            url_string.startswith("data:") or 
+            url_string.startswith("bookmarks://")):
+            return None
+        
+        # Get properly encoded URL
+        try:
+            encoded_url = ensure_url_encoded(url_string)
+            logger.debug(f"Browser URL encoding: {url_string} -> {encoded_url}")
+            return encoded_url
+        except Exception as e:
+            logger.error(f"Error getting encoded URL: {e}")
+            return None
     
     def use_current_link(self):
         """Emit signal with current URL for use in downloader."""
-        url = self.get_encoded_url()
-        if url:
-            self.url_selected.emit(url)
-            QMessageBox.information(
-                self, 
-                "Link Transferred", 
-                f"URL transferred to downloader:\n{url}"
-            )
+        encoded_url = self.get_encoded_url()
+        
+        if encoded_url and is_valid_ftp_url(encoded_url):
+            self.url_selected.emit(encoded_url)
+            self.show_status_message(f"URL transferred to downloader", 3000)
+            logger.info(f"URL transferred to downloader: {encoded_url}")
+        elif encoded_url:
+            self.show_status_message("Invalid FTP/HTTP URL for server operations", 3000)
+            logger.warning(f"Invalid URL for FTP operations: {encoded_url}")
         else:
-            QMessageBox.warning(
-                self, 
-                "No URL", 
-                "Please navigate to a valid URL first."
-            )
+            self.show_status_message("Current page is not a valid FTP/HTTP directory", 3000)
+            logger.warning("No valid URL to transfer")
+    
+    def show_status_message(self, message, duration=3000):
+        """Show status message in main window status bar."""
+        try:
+            # Find the main window through parent hierarchy
+            widget = self.parent()
+            while widget and not hasattr(widget, 'statusBar'):
+                widget = widget.parent()
+            
+            if widget and hasattr(widget, 'statusBar'):
+                widget.statusBar.showMessage(message, duration)
+            else:
+                logger.info(f"Status: {message}")
+        except Exception as e:
+            logger.error(f"Error showing status message: {e}")
+    
+    def handle_navigation_error(self):
+        """Handle navigation errors in browser view."""
+        self.show_status_message("Navigation error. Please check the URL and try again.", 3000)
+        self.use_link_button.setEnabled(False)
+        logger.warning("Navigation error occurred")
     
     def set_url(self, url):
         """Set a specific URL in the browser."""
