@@ -13,13 +13,13 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QIcon, QMovie, QPalette, QColor
 
-from core.lister import DirectoryLister
-from core.downloader import DownloadManager
-from config.manager import ConfigManager
-from utils.logger import setup_logger
-from ui.downloads_tab import DownloadsTab
-from ui.settings_tab import SettingsTab
-from ui.browser_tab import BrowserTab
+from src.core.lister import DirectoryLister
+from src.core.downloader import DownloadManager
+from src.config.manager import ConfigManager
+from src.utils.logger import setup_logger
+from src.utils.memory_monitor import MemoryMonitor
+from src.ui.downloads_tab import DownloadsTab
+from src.ui.settings_tab import SettingsTab
 import sys
 import subprocess
 from urllib.parse import unquote
@@ -40,17 +40,30 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("FTP Batch Downloader")
+        self.setGeometry(100, 100, 1200, 800)
+        self.setAcceptDrops(True)
         
         # Set window icon
         try:
-            self.setWindowIcon(QIcon("resources/icons/favicon.ico"))
+            icon_path = os.path.join("resources", "icons", "favicon.ico")
+            if os.path.exists(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
         except Exception as e:
-            logger.warning(f"Could not load window icon: {e}")
+            logging.warning(f"Could not load window icon: {e}")
         
-        self.setGeometry(100, 100, 1200, 800)
-        self.setAcceptDrops(True)
         self.config_manager = ConfigManager()
         self.download_manager = DownloadManager(self.config_manager)
+        
+        # Initialize memory monitor
+        self.memory_monitor = MemoryMonitor(
+            warning_threshold=self.config_manager.get('memory_warning_threshold', 80.0),
+            critical_threshold=self.config_manager.get('memory_critical_threshold', 90.0)
+        )
+        self.memory_monitor.memory_warning.connect(self._on_memory_warning)
+        self.memory_monitor.memory_critical.connect(self._on_memory_critical)
+        self.memory_monitor.memory_stats_updated.connect(self._update_memory_display)
+        self.memory_monitor.start_monitoring()
+        
         self.init_ui()
         self.create_toolbars()
         self.create_status_bar()
@@ -93,11 +106,6 @@ class MainWindow(QMainWindow):
         self.settings_tab.view_log.connect(self.show_error_log)
         self.settings_tab.theme_changed.connect(self.apply_theme)
         self.tab_widget.addTab(self.settings_tab, "Settings")
-        
-        # Browser tab
-        self.browser_tab = BrowserTab()
-        self.tab_widget.addTab(self.browser_tab, "Browser")
-        
         self.apply_theme(theme_name)
 
     def init_downloader_tab(self, tab_widget):
@@ -248,9 +256,6 @@ class MainWindow(QMainWindow):
         self.download_manager.file_status_changed.connect(self.on_file_status_changed)
         self.download_manager.overall_progress.connect(self.on_overall_progress)
         self.download_manager.all_finished.connect(self.on_all_downloads_finished)
-        
-        # Connect browser tab signals
-        self.browser_tab.url_selected.connect(self.handle_browser_url_selected)
         self.download_manager.error.connect(self.on_download_error)
         self.download_manager.size_calc_progress.connect(self.on_size_calc_progress)
         self.download_manager.size_calc_finished.connect(self.on_size_calc_finished)
@@ -272,7 +277,15 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
 
     def create_status_bar(self):
-        self.statusBar = QStatusBar(); self.setStatusBar(self.statusBar); self.statusBar.showMessage("Ready")
+        self.statusBar = QStatusBar()
+        self.setStatusBar(self.statusBar)
+        
+        # Create memory usage label
+        self.memory_label = QLabel("Memory: --")
+        self.memory_label.setToolTip("Memory usage statistics")
+        self.statusBar.addPermanentWidget(self.memory_label)
+        
+        self.statusBar.showMessage("Ready")
 
     def set_ui_state(self, downloading: bool, message: str = ""):
         self.is_downloading = downloading
@@ -355,7 +368,6 @@ class MainWindow(QMainWindow):
         self.lister_thread.item_found.connect(self.add_tree_item)
         self.lister_thread.error.connect(self.on_listing_error)
         self.lister_thread.finished.connect(self.on_listing_finished)
-        self.lister_thread.cache_status.connect(self.on_cache_status)
         self.lister_thread.start()
 
     def add_tree_item(self, item_data):
@@ -383,13 +395,7 @@ class MainWindow(QMainWindow):
     
     def on_listing_finished(self):
         self.statusBar.showMessage("Listing complete.", 5000); self.fetch_button.setEnabled(True); self.cancel_fetch_button.setEnabled(False); self.tree_widget.expandToDepth(0)
-    
-    def on_listing_error(self, msg): 
-        self.show_message("Listing Error", f"Could not fetch directory:\n{msg}", QMessageBox.Critical); self.statusBar.showMessage(f"Error: {msg}", 5000); self.fetch_button.setEnabled(True); self.cancel_fetch_button.setEnabled(False)
-    
-    def on_cache_status(self, status):
-        """Handle cache status updates from directory lister."""
-        self.statusBar.showMessage(status, 2000)
+    def on_listing_error(self, msg): self.show_message("Listing Error", f"Could not fetch directory:\n{msg}", QMessageBox.Critical); self.statusBar.showMessage(f"Error: {msg}", 5000); self.fetch_button.setEnabled(True); self.cancel_fetch_button.setEnabled(False)
 
     def handle_item_check(self, item, column):
         if column == 0:
@@ -646,17 +652,57 @@ class MainWindow(QMainWindow):
         }
         self.setStyleSheet(styles.get(theme_name, styles["Colorful"]))
     
-    def handle_browser_url_selected(self, url):
-        """Handle URL selection from browser tab."""
-        # Switch to downloader tab
-        self.tab_widget.setCurrentIndex(0)
-        
-        # Set URL in the input field
-        self.url_input.setText(url)
-        
-        # Automatically start fetching directory listing
-        self.fetch_directory_listing()
+    def _on_memory_warning(self, memory_percent):
+        """Handle memory warning."""
+        logger.warning(f"Memory usage warning: {memory_percent:.1f}%")
+        self.statusBar.showMessage(f"High memory usage: {memory_percent:.1f}%", 5000)
     
-    def set_url_from_browser(self, url):
-        """Set URL in downloader from browser (alternative method)."""
-        self.handle_browser_url_selected(url)
+    def _on_memory_critical(self, memory_percent):
+        """Handle critical memory usage."""
+        logger.critical(f"Critical memory usage: {memory_percent:.1f}%")
+        QMessageBox.warning(
+            self,
+            "Critical Memory Usage",
+            f"Memory usage is critically high ({memory_percent:.1f}%).\n"
+            "Consider reducing concurrent downloads or clearing cache."
+        )
+    
+    def _update_memory_display(self, stats):
+        """Update the memory display in the status bar."""
+        if hasattr(self, 'memory_label'):
+            try:
+                process_mb = stats.get('process_rss_mb', 0)
+                system_percent = stats.get('memory_percent', 0)
+                self.memory_label.setText(f"Memory: {process_mb:.1f}MB ({system_percent:.1f}%)")
+                
+                # Update tooltip with detailed info
+                tooltip = (
+                    f"Process Memory: {process_mb:.1f}MB\n"
+                    f"System Memory: {system_percent:.1f}%\n"
+                    f"Objects: {stats.get('gc_objects', 0):,}"
+                )
+                self.memory_label.setToolTip(tooltip)
+                
+            except Exception as e:
+                logger.error(f"Error updating memory display: {e}")
+    
+    def closeEvent(self, event):
+        """Handle application close event."""
+        try:
+            # Stop memory monitoring
+            if hasattr(self, 'memory_monitor'):
+                self.memory_monitor.stop_monitoring()
+            
+            # Stop any ongoing downloads
+            if hasattr(self, 'download_manager'):
+                self.download_manager.cancel_all()
+            
+            # Cancel any ongoing directory listing
+            if self.lister_thread and self.lister_thread.isRunning():
+                self.lister_thread.cancel()
+                self.lister_thread.wait(3000)  # Wait up to 3 seconds
+            
+        except Exception as e:
+            logger.error(f"Error during application shutdown: {e}")
+        
+        event.accept()

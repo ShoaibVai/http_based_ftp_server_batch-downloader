@@ -6,6 +6,7 @@ import os
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QProgressBar
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon
 
 # Before importing our modules, ensure the necessary directories exist.
 # This helps prevent import errors if the script is run from a clean state.
@@ -27,6 +28,13 @@ def main():
     Initializes and runs the PyQt5 application.
     """
     app = QApplication(sys.argv)
+    
+    # Set application icon
+    try:
+        app.setWindowIcon(QIcon("resources/icons/favicon.ico"))
+    except Exception as e:
+        print(f"Warning: Could not load application icon: {e}")
+    
     main_window = MainWindow()
     main_window.show()
     sys.exit(app.exec_())

@@ -50,20 +50,60 @@ class DownloadWorker(QThread):
         # Decode percent-encoded rel_path for local file creation
         local_filename = os.path.join(self.base_folder, unquote(self.rel_path))
         headers, resumed_bytes = {}, 0
+        
+        # Check for resume capability
         if os.path.exists(local_filename):
             resumed_bytes = os.path.getsize(local_filename)
             headers['Range'] = f'bytes={resumed_bytes}-'
-        with requests.get(self.url, stream=True, headers=headers, timeout=self.config.get('request_timeout')) as r:
+        
+        # Get optimal chunk size based on config
+        chunk_size = self.config.get('chunk_size', 8192)
+        max_speed = self.config.get('max_download_speed', 0)  # 0 = unlimited
+        
+        with requests.get(self.url, stream=True, headers=headers, 
+                         timeout=self.config.get('request_timeout', 30)) as r:
             r.raise_for_status()
-            total_size = self.total_size or int(r.headers.get('content-length', 0)) + resumed_bytes
+            
+            # Calculate total size
+            content_length = r.headers.get('content-length')
+            if content_length:
+                total_size = int(content_length) + resumed_bytes
+            else:
+                total_size = self.total_size or 0
+            
             downloaded_bytes = resumed_bytes
             os.makedirs(os.path.dirname(local_filename), exist_ok=True)
+            
+            # Speed control variables
+            last_time = time.time()
+            bytes_this_second = 0
+            
             with open(local_filename, 'ab' if resumed_bytes > 0 else 'wb') as f:
-                for chunk in r.iter_content(chunk_size=self.config.get('chunk_size')):
+                for chunk in r.iter_content(chunk_size=chunk_size):
                     with QMutexLocker(self.mutex):
-                        if not self._is_running: return
-                        if self._is_paused: self.pause_cond.wait(self.mutex)
+                        if not self._is_running: 
+                            return
+                        if self._is_paused: 
+                            self.pause_cond.wait(self.mutex)
+                    
                     if chunk:
+                        # Speed throttling
+                        if max_speed > 0:
+                            current_time = time.time()
+                            time_diff = current_time - last_time
+                            
+                            if time_diff >= 1.0:  # Reset every second
+                                last_time = current_time
+                                bytes_this_second = 0
+                            
+                            bytes_this_second += len(chunk)
+                            
+                            # If we're going too fast, sleep
+                            if bytes_this_second > max_speed:
+                                sleep_time = 1.0 - time_diff
+                                if sleep_time > 0:
+                                    time.sleep(sleep_time)
+                        
                         f.write(chunk)
                         chunk_len = len(chunk)
                         downloaded_bytes += chunk_len
